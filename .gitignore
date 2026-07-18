@@ -1,0 +1,43 @@
+# macOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment and password files
+.env
+.env.*
+!.env.example
+
+# Database exports and backups
+*.sql
+*.sqlite
+*.db
+*.bak
+*.backup
+
+# Compressed backup files
+*.zip
+*.tar
+*.tar.gz
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+cache/
+
+# IDE and editor settings
+.vscode/
+.idea/
+
+# PHP dependencies, if added later
+vendor/
+
+# JavaScript dependencies, if added later
+node_modules/
+
+# Local PHP configuration files
+/config/env.php
+/config/env copy.php

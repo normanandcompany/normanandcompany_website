@@ -1,0 +1,25 @@
+# =========================================
+# Norman and Company Robots.txt
+# =========================================
+
+# Allow all search engine crawlers
+
+User-agent: *
+Allow: /
+
+# =========================================
+# OPTIONAL BLOCKED DIRECTORIES
+# Uncomment these later if needed
+# =========================================
+
+# Disallow: /api/
+# Disallow: /profiles/
+# Disallow: /transactions/
+# Disallow: /admin/
+# Disallow: /customer/
+
+# =========================================
+# SITEMAP LOCATION
+# =========================================
+
+Sitemap: https://www.normanandcompany.com/sitemap.json

@@ -1,0 +1,84 @@
+{
+  "name": "Norman and Company",
+  "short_name": "NormanAndCo",
+
+  "description": "Trusted Caribbean travel resources, cruise guides, destination information, travel essentials, and curated travel products.",
+
+  "start_url": "/",
+
+  "scope": "/",
+
+  "display": "standalone",
+
+  "orientation": "portrait-primary",
+
+  "background_color": "#F1FAEE",
+
+  "theme_color": "#2A9D8F",
+
+  "categories": [
+    "travel",
+    "shopping",
+    "tourism",
+    "lifestyle"
+    "Caribbean"
+    "cruise"
+    "resorts"
+  ],
+
+  "lang": "en-US",
+
+  "dir": "ltr",
+
+  "icons": [
+
+    {
+      "src": "/images/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+
+    {
+      "src": "/images/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+
+    {
+      "src": "/images/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+
+    {
+      "src": "/images/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+
+    {
+      "src": "/images/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },
+
+    {
+      "src": "/images/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+
+    {
+      "src": "/images/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png"
+    },
+
+    {
+      "src": "/images/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+
+  ]
+}

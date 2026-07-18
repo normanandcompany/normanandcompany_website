@@ -1,0 +1,527 @@
+/* -----------------------------
+OLD COLOR THEME
+
+:root {
+    --primary: #2A9D8F;
+    --primary-accent: #21867A;
+    --secondary: #E9C46A;
+    --accent: #F4A261;
+    --background: #F1FAEE;
+    --text: #1D3557;
+}
+*/
+
+:root {
+    /* Caribbean Ocean Blue */
+    --primary: #1687C9;
+
+    /* Deep Navy from the banner text */
+    --primary-accent: #163A63;
+
+    /* Warm Sand / Banner Cream */
+    --secondary: #F4DFC0;
+
+    /* Macaw Red */
+    --accent: #D84B3D;
+
+    /* Bright Sky */
+    --background: #F4FBFE;
+
+    /* Dark Navy Text */
+    --text: #1B2F4F;
+}
+
+p {
+    margin: 0 0 20px 0;
+}
+
+p:last-child {
+    margin-bottom: 0;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+strong.highlight-strong {
+    color: #F4A261;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: var(--background);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    background: white;
+    background-image: url("/images/HeaderBackground.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    height: 257px;
+    margin: 0;
+    padding: 0;
+    border-bottom: 2px solid var(--primary);
+    position: relative;
+    overflow: hidden;
+}
+
+.header-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+.logo-section {
+    position: absolute;
+    top: 10px;
+    left: 20px;
+    z-index: 10;
+}
+
+.logo {
+    width: 500px;
+    height: auto;
+    display: block;
+}
+
+nav {
+    background: var(--primary);
+}
+
+nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    justify-content: center;
+}
+
+nav ul li a,
+.cart-nav-button {
+    color: white;
+    text-decoration: none;
+    display: block;
+    padding: 1rem;
+}
+
+nav ul li a:hover,
+.cart-nav-button:hover,
+.cart-nav-button:focus {
+    background: var(--accent);
+    outline: none;
+}
+
+.cart-nav-button {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+}
+
+.cart-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: white;
+    color: var(--primary-accent);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.breadcrumb {
+    padding: 1rem;
+    background: #ffffff;
+    font-size: 0.9rem;
+}
+main {
+    flex: 1;
+    padding: 2rem;
+    background: var(--background);
+    color: var(--text);
+}
+
+main h1,
+main h2,
+main h3 {
+    color: var(--primary);
+    margin-bottom: 1rem;
+}
+
+main li {
+    color: var(--text);
+    line-height: 1.7;
+}
+
+main section {
+    background: white;
+    border-left: 6px solid var(--secondary);
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+main a {
+    color: var(--primary);
+}
+
+main a:hover {
+    color: var(--accent);
+}
+
+.hero {
+    /* background-image: url('/images/hero-caribbean.jpg'); */
+    background-size: cover;
+    background-position: center;
+    border-radius: 12px;
+    min-height: 450px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: left;
+    color: white;
+    padding: 2rem;
+}
+
+.hero-content {
+    background: rgba(255,255,255,0);
+    padding: 2rem;
+    border-radius: 12px;
+}
+
+.footer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+}
+
+.copyright {
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    min-width: 180px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.dropdown-content a {
+    display: block;
+    padding: 1rem;
+    text-decoration: none;
+    color: var(--text);
+}
+
+.user-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.user-menu:hover .dropdown-content {
+    display: block;
+}
+
+.dropbtn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 0.8rem 1rem;
+    cursor: pointer;
+}
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+form {
+    display: grid;
+    gap: 1rem;
+    max-width: 700px;
+}
+
+input,
+textarea,
+select {
+    padding: 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+
+    nav ul {
+        flex-direction: column;
+    }
+
+    .header-container {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .hero {
+        min-height: 350px;
+    }
+}
+
+footer {
+    background: var(--primary);
+    color: white;
+    padding: 2rem;
+    border-top: 4px solid var(--secondary);
+}
+
+footer a {
+    color: white;
+    text-decoration: none;
+}
+
+footer a:hover {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+footer ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+footer li {
+    margin-bottom: 0.5rem;
+}
+
+.footer-logo {
+    width: 250px;
+    margin-top: 1rem;
+    display: block;
+}
+
+.footer-bottom {
+    background-color: var(--secondary);
+    color: white;
+    align-items: center;
+    padding: 0;
+    margin: 0; 
+    justify-content: center;
+    height: 50px;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+/* Default side-by-side layout (used for Norman) */
+.content-with-image {
+    display: flex;
+    align-items: flex-start;
+    gap: 2.5rem;
+    margin: 2rem 0;
+}
+
+.text-content {
+    flex: 1;
+}
+
+.text-content p {
+    margin-bottom: 1.1rem;
+}
+
+.about-section figure {
+    margin: 0;
+    text-align: center;
+}
+
+.about-section figure img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    transition: transform 0.3s ease;
+}
+
+.about-section figure img:hover {
+    transform: scale(1.03);
+}
+
+.about-section figcaption {
+    text-align: center;
+    margin-top: 0.9rem;
+    color: #555;
+    font-style: italic;
+    font-size: 0.95rem;
+}
+
+/* Norman - Small image, side by side */
+.norman-figure {
+    max-width: 175px;
+    flex: 0 0 185px;
+}
+
+/* Who We Are - Image floats right, text wraps underneath */
+.wrap-layout {
+    display: block; /* Override flex */
+}
+
+.wrap-layout .couple-figure {
+    float: right;
+    margin: 0 0 1.5rem 2rem;
+    max-width: 420px;   /* Slightly smaller for better text wrap */
+    width: 100%;
+}
+
+.wrap-layout .text-content {
+    margin-top: 0;
+}
+
+/* Clearfix to prevent layout collapse */
+.wrap-layout::after {
+    content: "";
+    display: table;
+    clear: both;
+}
+
+/* Responsive - Stack on mobile */
+@media (max-width: 768px) {
+    .content-with-image,
+    .wrap-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .wrap-layout .couple-figure {
+        float: none;
+        margin: 0 auto 1rem;
+        max-width: 100%;
+    }
+    
+    .norman-figure {
+        max-width: 280px;
+        margin: 0 auto;
+        flex: 0 0 auto;
+    }
+    
+    .about-section h1 {
+        font-size: 2rem;
+    }
+    
+    .about-section h2 {
+        font-size: 1.65rem;
+    }
+}
+
+/* =========================================
+   SOCIAL MEDIA ICONS
+========================================= */
+
+.social-icons {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    align-items: center;
+}
+
+.social-icons a {
+    display: inline-block;
+}
+
+.social-icons img {
+    width: 40px;
+    height: 40px;
+    transition: transform 0.2s ease;
+}
+
+.social-icons img:hover {
+    transform: scale(1.08);
+}
+
+/* =========================================
+   BUTTON VALUES
+========================================= */
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: background 0.2s ease, transform 0.1s ease;
+    display: inline-block;
+}
+
+.btn-primary:hover {
+    background: var(--primary-accent);
+    transform: translateY(-1px);
+}
+
+.product-image {
+    width: 250px;
+}
+
+/* =========================================
+   PRODUCT DETAIL LINKS
+========================================= */
+
+.product-details-link a {
+    text-decoration: none;
+    color: inherit; /* optional: removes default blue link color */
+}
+
+/* Remove underline for all link states */
+.product-details-link a:link,
+.product-details-link a:visited {
+    text-decoration: none;
+}
+
+/* Optional hover behavior */
+.product-details-link a:hover,
+.product-details-link a:active {
+    text-decoration: none; /* or underline if you want feedback */
+}
+
+/* Remove borders/decoration from images inside links */
+.product-details-link a img {
+    border: 0;
+    text-decoration: none;
+    display: block; /* prevents inline spacing gaps */
+}

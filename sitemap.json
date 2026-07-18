@@ -1,0 +1,67 @@
+{
+  "site": {
+    "name": "Norman and Company",
+    "url": "https://www.normanandcompany.com",
+    "description": "Caribbean travel resources, cruise tips, destination guides, travel essentials, and curated travel products."
+  },
+
+  "pages": [
+
+    {
+      "title": "Home",
+      "url": "/",
+      "priority": 1.0,
+      "changefreq": "weekly"
+    },
+
+    {
+      "title": "About Us",
+      "url": "/pages/about.html",
+      "priority": 0.8,
+      "changefreq": "monthly"
+    },
+
+    {
+      "title": "Travel Store",
+      "url": "/pages/travelstore.html",
+      "priority": 0.9,
+      "changefreq": "weekly"
+    },
+
+    {
+      "title": "Destinations",
+      "url": "/pages/destinations.html",
+      "priority": 0.9,
+      "changefreq": "weekly"
+    },
+
+    {
+      "title": "Travel Essentials",
+      "url": "/pages/travelessentials.html",
+      "priority": 0.8,
+      "changefreq": "monthly"
+    },
+
+    {
+      "title": "Travel Tips",
+      "url": "/pages/traveltips.html",
+      "priority": 0.8,
+      "changefreq": "weekly"
+    },
+
+    {
+      "title": "Blog",
+      "url": "/pages/blog.html",
+      "priority": 0.7,
+      "changefreq": "daily"
+    },
+
+    {
+      "title": "Contact",
+      "url": "/pages/contact.html",
+      "priority": 0.5,
+      "changefreq": "yearly"
+    }
+
+  ]
+}
