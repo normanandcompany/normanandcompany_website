@@ -41,3 +41,5 @@ node_modules/
 # Local PHP configuration files
 /config/env.php
 /config/env copy.php
+/config/cloudflare-analytics.php
+/private/cloudflare-analytics.php

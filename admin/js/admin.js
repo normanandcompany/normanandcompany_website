@@ -286,29 +286,357 @@ async function loadDestinations() {
 
 async function loadDashboard() {
 
+    initDashboardTabs();
+
     try {
 
         const response = await fetch('/admin/api/getDashboard.php');
         const data = await response.json();
+        const dashboard = Array.isArray(data) ? data[0] : null;
 
-        const dashboard = data[0];
+        if (!response.ok || !dashboard) {
+            throw new Error(data?.message || 'Unable to load dashboard data.');
+        }
 
-        document
-            .querySelectorAll('[data-field]')
-            .forEach(element => {
-
-                const field = element.dataset.field;
-
-                if (dashboard[field] !== undefined) {
-                    element.textContent = dashboard[field];
-                }
-
-            });
+        renderDashboardFields(dashboard);
+        renderDashboardProductInfoLists(dashboard);
+        renderDashboardProductViewLists(dashboard);
+        renderDashboardReviewProductList(dashboard);
+        renderDashboardReviewTable(dashboard);
 
     } catch (err) {
 
         console.error(err);
 
+    }
+
+    initCloudflareAnalyticsDashboard();
+}
+
+function renderDashboardFields(dashboard) {
+    document
+        .querySelectorAll('[data-field]')
+        .forEach(element => {
+
+            const field = element.dataset.field;
+
+            if (Object.prototype.hasOwnProperty.call(dashboard, field)) {
+                element.textContent = formatDashboardFieldValue(dashboard[field], element.dataset.format);
+            }
+
+        });
+}
+
+function formatDashboardFieldValue(value, format) {
+    if (format === 'rating') {
+        return `${formatDashboardRatingNumber(value)} / 5`;
+    }
+
+    if (format === 'currency') {
+        return formatDashboardCurrency(value);
+    }
+
+    if (format === 'percent') {
+        return `${formatDashboardPercentNumber(value)}%`;
+    }
+
+    if (format === 'integer') {
+        return formatDashboardInteger(value);
+    }
+
+    return value ?? '0';
+}
+
+function formatDashboardRatingNumber(value) {
+    const rating = Number.parseFloat(value);
+
+    if (!Number.isFinite(rating)) {
+        return '0.0';
+    }
+
+    return rating.toFixed(1);
+}
+
+function formatDashboardCurrency(value) {
+    const amount = Number.parseFloat(value);
+
+    if (!Number.isFinite(amount)) {
+        return '$0.00';
+    }
+
+    return amount.toLocaleString('en-US', {
+        style: 'currency',
+        currency: 'USD'
+    });
+}
+
+function formatDashboardPercentNumber(value) {
+    const percent = Number.parseFloat(value);
+
+    if (!Number.isFinite(percent)) {
+        return '0.0';
+    }
+
+    return percent.toLocaleString('en-US', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+    });
+}
+
+function formatDashboardInteger(value) {
+    const number = Number.parseInt(value ?? 0, 10);
+
+    if (!Number.isFinite(number)) {
+        return '0';
+    }
+
+    return number.toLocaleString('en-US');
+}
+
+function renderDashboardProductInfoLists(dashboard) {
+    document
+        .querySelectorAll('[data-product-info-list-field]')
+        .forEach((list) => {
+            const field = list.dataset.productInfoListField;
+            const rows = Array.isArray(dashboard?.[field]) ? dashboard[field] : [];
+            const emptyMessage = list.dataset.emptyMessage || 'No product data recorded.';
+
+            if (rows.length === 0) {
+                list.innerHTML = `<li>${adminEscapeHtml(emptyMessage)}</li>`;
+                return;
+            }
+
+            list.innerHTML = rows.map((row) => {
+                if (field === 'low_inventory_products') {
+                    return renderDashboardInventoryListItem(row);
+                }
+
+                return renderDashboardSalesListItem(row);
+            }).join('');
+        });
+}
+
+function renderDashboardSalesListItem(row) {
+    const productName = adminEscapeHtml(row.product_name || 'Unnamed product');
+    const soldQuantity = Number.parseInt(row.sold_quantity ?? 0, 10);
+    const soldLabel = soldQuantity === 1 ? 'unit sold' : 'units sold';
+
+    return `<li>${productName} (${formatDashboardInteger(soldQuantity)} ${soldLabel})</li>`;
+}
+
+function renderDashboardInventoryListItem(row) {
+    const productName = adminEscapeHtml(row.product_name || 'Unnamed product');
+    const inventoryCount = Number.parseInt(row.inventory_count ?? 0, 10);
+    const stockLabel = inventoryCount === 1 ? 'in stock' : 'in stock';
+    const sku = String(row.sku || '').trim();
+    const skuText = sku ? ` | SKU ${adminEscapeHtml(sku)}` : '';
+
+    return `<li>${productName} (${formatDashboardInteger(inventoryCount)} ${stockLabel}${skuText})</li>`;
+}
+
+function renderDashboardProductViewLists(dashboard) {
+    document
+        .querySelectorAll('[data-list-field]')
+        .forEach((list) => {
+            const field = list.dataset.listField;
+            const rows = Array.isArray(dashboard?.[field]) ? dashboard[field] : [];
+
+            if (rows.length === 0) {
+                list.innerHTML = '<li>No product views recorded.</li>';
+                return;
+            }
+
+            list.innerHTML = rows.map((row) => {
+                const productName = adminEscapeHtml(row.product_name || 'Unnamed product');
+                const viewCount = Number.parseInt(row.view_count ?? 0, 10);
+                const suffix = viewCount === 1 ? 'view' : 'views';
+
+                return `<li>${productName} (${viewCount} ${suffix})</li>`;
+            }).join('');
+        });
+}
+
+function renderDashboardReviewProductList(dashboard) {
+    const list = document.querySelector('[data-review-list-field="top_reviewed_products"]');
+
+    if (!list) return;
+
+    const rows = Array.isArray(dashboard?.top_reviewed_products)
+        ? dashboard.top_reviewed_products
+        : [];
+
+    if (rows.length === 0) {
+        list.innerHTML = '<li class="dashboard-review-empty">No product reviews recorded.</li>';
+        return;
+    }
+
+    list.innerHTML = rows.map((row) => {
+        const productName = adminEscapeHtml(row.product_name || 'Unnamed product');
+        const reviewCount = Number.parseInt(row.review_count ?? 0, 10);
+        const averageRating = formatDashboardRatingNumber(row.average_rating);
+        const latestDate = formatDate(row.latest_reviewed_at);
+        const countLabel = reviewCount === 1 ? 'review' : 'reviews';
+
+        return `
+            <li>
+                <div>
+                    <strong>${productName}</strong>
+                    <small>Last reviewed ${latestDate}</small>
+                </div>
+                <span>${reviewCount} ${countLabel}</span>
+                <small>${averageRating} / 5 avg</small>
+            </li>
+        `;
+    }).join('');
+}
+
+function renderDashboardReviewTable(dashboard) {
+    const tbody = document.getElementById('dashboardProductReviewsBody');
+
+    if (!tbody) return;
+
+    const rows = Array.isArray(dashboard?.recent_product_reviews)
+        ? dashboard.recent_product_reviews
+        : [];
+
+    if (rows.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="product-empty-state">
+                    No product reviews recorded.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = rows.map((review) => {
+        const title = String(review.review_title || '').trim() || 'Untitled review';
+        const content = dashboardReviewExcerpt(review.review_content);
+        const productName = review.product_name || `Product #${review.product_id || 'N/A'}`;
+        const customerName = String(review.customer_name || '').trim();
+        const customerEmail = String(review.customer_email || '').trim();
+        const fallbackCustomer = review.user_id ? `User #${review.user_id}` : 'N/A';
+        const displayCustomer = customerName || customerEmail || fallbackCustomer;
+        const customerDetail = customerName && customerEmail ? customerEmail : '';
+        const approvalBadge = Number(review.is_approved) === 1
+            ? '<span class="status-badge active">Approved</span>'
+            : '<span class="status-badge warning">Pending</span>';
+        const visibilityBadge = Number(review.visible) === 1
+            ? '<span class="status-badge active">Visible</span>'
+            : '<span class="status-badge muted">Hidden</span>';
+
+        return `
+            <tr>
+                <td>
+                    <div class="dashboard-review-title-cell">
+                        <strong>${adminEscapeHtml(title)}</strong>
+                        ${content ? `<small>${adminEscapeHtml(content)}</small>` : ''}
+                    </div>
+                </td>
+                <td>${adminEscapeHtml(productName)}</td>
+                <td>
+                    <div class="dashboard-review-customer-cell">
+                        <strong>${adminEscapeHtml(displayCustomer)}</strong>
+                        ${customerDetail ? `<small>${adminEscapeHtml(customerDetail)}</small>` : ''}
+                    </div>
+                </td>
+                <td>${renderDashboardRatingPill(review.rating)}</td>
+                <td>
+                    <div class="status-stack">
+                        ${approvalBadge}
+                        ${visibilityBadge}
+                    </div>
+                </td>
+                <td>${formatDate(review.created_at)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function dashboardReviewExcerpt(value) {
+    const text = String(value || '').trim().replace(/\s+/g, ' ');
+
+    if (text.length <= 120) {
+        return text;
+    }
+
+    return `${text.slice(0, 117)}...`;
+}
+
+function renderDashboardRatingPill(value) {
+    const rating = Number.parseInt(value ?? '', 10);
+
+    if (!Number.isFinite(rating) || rating <= 0) {
+        return '<span class="dashboard-review-rating muted">N/A</span>';
+    }
+
+    return `<span class="dashboard-review-rating">${rating}/5</span>`;
+}
+
+function initDashboardTabs() {
+    const tabList = document.querySelector('.dashboard-tabs');
+
+    if (!tabList || tabList.dataset.bound === 'true') return;
+
+    tabList.dataset.bound = 'true';
+
+    tabList.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-dashboard-tab]');
+
+        if (!button) return;
+
+        activateDashboardTab(button.dataset.dashboardTab);
+    });
+
+    tabList.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+
+        const tabs = Array.from(tabList.querySelectorAll('[data-dashboard-tab]'));
+        const currentIndex = tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true');
+        let nextIndex = currentIndex;
+
+        if (event.key === 'ArrowRight') {
+            nextIndex = currentIndex >= tabs.length - 1 ? 0 : currentIndex + 1;
+        } else if (event.key === 'ArrowLeft') {
+            nextIndex = currentIndex <= 0 ? tabs.length - 1 : currentIndex - 1;
+        } else if (event.key === 'Home') {
+            nextIndex = 0;
+        } else if (event.key === 'End') {
+            nextIndex = tabs.length - 1;
+        }
+
+        const nextTab = tabs[nextIndex];
+
+        if (!nextTab) return;
+
+        event.preventDefault();
+        nextTab.focus();
+        activateDashboardTab(nextTab.dataset.dashboardTab);
+    });
+}
+
+function activateDashboardTab(tabName) {
+    if (!tabName) return;
+
+    document.querySelectorAll('[data-dashboard-tab]').forEach((button) => {
+        const isActive = button.dataset.dashboardTab === tabName;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    document.querySelectorAll('[data-dashboard-panel]').forEach((panel) => {
+        const isActive = panel.dataset.dashboardPanel === tabName;
+        panel.classList.toggle('active', isActive);
+        panel.hidden = !isActive;
+    });
+
+    if (tabName === 'site-info') {
+        Object.values(cloudflareAnalyticsState.charts).forEach((chart) => {
+            if (chart && typeof chart.resize === 'function') {
+                chart.resize();
+            }
+        });
     }
 }
 
@@ -358,6 +686,10 @@ const blogManagerState = {
     currentPage: 1,
     perPage: 10,
     editorMode: 'visual'
+};
+
+const cloudflareAnalyticsState = {
+    charts: {}
 };
 
 function adminEscapeHtml(value) {
@@ -425,6 +757,665 @@ async function fetchAdminJson(url, options = {}) {
     }
 
     return data;
+}
+
+function initCloudflareAnalyticsDashboard() {
+    const dashboard = document.getElementById('cloudflareAnalyticsDashboard');
+
+    if (!dashboard) return;
+
+    const form = document.getElementById('cloudflareAnalyticsForm');
+    const range = document.getElementById('cloudflareAnalyticsRange');
+    const customRange = document.getElementById('cloudflareCustomRange');
+    const startDate = document.getElementById('cloudflareStartDate');
+    const endDate = document.getElementById('cloudflareEndDate');
+
+    if (!form || !range) return;
+
+    const today = new Date();
+    const priorWeek = new Date(today);
+    priorWeek.setDate(today.getDate() - 6);
+
+    if (startDate && !startDate.value) {
+        startDate.value = cloudflareDateInputValue(priorWeek);
+    }
+
+    if (endDate && !endDate.value) {
+        endDate.value = cloudflareDateInputValue(today);
+    }
+
+    const toggleCustomRange = () => {
+        if (customRange) {
+            customRange.hidden = range.value !== 'custom';
+        }
+    };
+
+    toggleCustomRange();
+
+    if (dashboard.dataset.bound !== 'true') {
+        dashboard.dataset.bound = 'true';
+
+        range.addEventListener('change', () => {
+            toggleCustomRange();
+            loadCloudflareAnalyticsDashboard(false);
+        });
+
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            loadCloudflareAnalyticsDashboard(document.getElementById('cloudflareForceRefresh')?.checked === true);
+        });
+    }
+
+    loadCloudflareAnalyticsDashboard(false);
+}
+
+async function loadCloudflareAnalyticsDashboard(forceRefresh = false) {
+    const dashboard = document.getElementById('cloudflareAnalyticsDashboard');
+
+    if (!dashboard) return;
+
+    const endpoint = dashboard.dataset.endpoint || '/admin/api/analytics/cloudflare-dashboard.php';
+    const params = cloudflareAnalyticsParams(forceRefresh);
+    const status = document.getElementById('cloudflareAnalyticsStatus');
+    const submitButton = document.querySelector('#cloudflareAnalyticsForm button[type="submit"]');
+
+    if (status) {
+        status.textContent = 'Loading Cloudflare analytics...';
+        status.dataset.type = 'loading';
+    }
+
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+
+    try {
+        const response = await fetch(`${endpoint}?${params.toString()}`, {
+            cache: 'no-store',
+            credentials: 'same-origin'
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (payload === null) {
+            throw new Error('Unexpected response from analytics endpoint.');
+        }
+
+        if (!response.ok || payload.success === false) {
+            throw new Error(payload.error || payload.message || `HTTP Error: ${response.status}`);
+        }
+
+        renderCloudflareAnalyticsDashboard(payload);
+    } catch (error) {
+        renderCloudflareAnalyticsError(error);
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+}
+
+function cloudflareAnalyticsParams(forceRefresh = false) {
+    const form = document.getElementById('cloudflareAnalyticsForm');
+    const params = new URLSearchParams();
+
+    if (!form) {
+        params.set('range', 'yesterday');
+        return params;
+    }
+
+    const data = new FormData(form);
+    const range = String(data.get('range') || 'yesterday');
+
+    params.set('range', range);
+
+    if (range === 'custom') {
+        params.set('start_date', String(data.get('start_date') || ''));
+        params.set('end_date', String(data.get('end_date') || ''));
+    }
+
+    if (forceRefresh) {
+        params.set('force_refresh', '1');
+    }
+
+    return params;
+}
+
+function renderCloudflareAnalyticsDashboard(payload) {
+    const data = payload?.data || {};
+    const meta = payload?.meta || {};
+    const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+
+    renderCloudflareStatus(meta, data.status);
+    renderCloudflareWarnings(warnings);
+    renderCloudflareSummary(data.summary || {});
+    renderCloudflareCharts(data.timeseries || {});
+    renderCloudflareBreakdowns(data.breakdowns || {});
+}
+
+function renderCloudflareStatus(meta, dataStatus) {
+    const status = document.getElementById('cloudflareAnalyticsStatus');
+
+    if (!status) return;
+
+    const parts = [];
+
+    if (meta.start_date && meta.end_date) {
+        parts.push(`${meta.start_date} to ${meta.end_date}`);
+    }
+
+    parts.push('Source: Cloudflare');
+
+    if (meta.cached === true) {
+        parts.push(meta.stale === true ? 'showing stale cache' : 'from cache');
+    } else if (meta.last_refreshed) {
+        parts.push(`refreshed ${formatCloudflareTimestamp(meta.last_refreshed)}`);
+    }
+
+    if (meta.grouping_interval) {
+        parts.push(`${meta.grouping_interval} grouping`);
+    }
+
+    if (dataStatus === 'not_configured') {
+        parts.push('not configured');
+    }
+
+    status.textContent = parts.join(' | ');
+    status.dataset.type = dataStatus === 'not_configured' ? 'warning' : 'ready';
+}
+
+function renderCloudflareWarnings(warnings) {
+    const container = document.getElementById('cloudflareAnalyticsWarnings');
+
+    if (!container) return;
+
+    clearElement(container);
+
+    if (!warnings.length) {
+        container.hidden = true;
+        return;
+    }
+
+    const list = document.createElement('ul');
+
+    warnings.forEach((warning) => {
+        const item = document.createElement('li');
+        item.textContent = String(warning);
+        list.appendChild(item);
+    });
+
+    container.appendChild(list);
+    container.hidden = false;
+}
+
+function renderCloudflareSummary(summary) {
+    const grid = document.getElementById('cloudflareSummaryGrid');
+
+    if (!grid) return;
+
+    clearElement(grid);
+
+    const cards = [
+        {
+            key: 'requests',
+            title: 'Cloudflare Requests',
+            format: 'number',
+            info: 'HTTP requests handled by Cloudflare. This is not page views or people.'
+        },
+        {
+            key: 'visits',
+            title: 'Cloudflare Visits',
+            format: 'number',
+            info: 'Cloudflare visits are based on Cloudflare HTTP analytics and are not exact unique visitors.'
+        },
+        {
+            key: 'unique_ips',
+            title: 'Estimated Unique IPs',
+            format: 'number',
+            info: 'Unavailable unless Cloudflare exposes a supported unique IP estimate for this dataset.'
+        },
+        {
+            key: 'bandwidth_bytes',
+            title: 'Bandwidth',
+            format: 'bytes',
+            info: 'Bytes transferred at Cloudflare edge.'
+        },
+        {
+            key: 'cache_hit_percentage',
+            title: 'Cache Hit',
+            format: 'percent',
+            info: 'Cached requests divided by cache-status requests returned by Cloudflare.'
+        },
+        {
+            key: 'cached_requests',
+            title: 'Cached Requests',
+            format: 'number',
+            info: 'Requests with cache statuses treated as served from cache.'
+        },
+        {
+            key: 'uncached_requests',
+            title: 'Uncached Requests',
+            format: 'number',
+            info: 'Requests with cache statuses not treated as cache hits.'
+        },
+        {
+            key: 'origin_requests',
+            title: 'Origin Requests',
+            format: 'number',
+            info: 'Only shown when Cloudflare exposes a supported origin request metric.'
+        },
+        {
+            key: 'security_events',
+            title: 'Security Events',
+            format: 'number',
+            info: 'Firewall or security events returned by Cloudflare for the selected range.'
+        },
+        {
+            key: 'blocked_requests',
+            title: 'Blocked Actions',
+            format: 'number',
+            info: 'Cloudflare security events with block actions.'
+        },
+        {
+            key: 'challenged_requests',
+            title: 'Challenged Actions',
+            format: 'number',
+            info: 'Cloudflare security events with challenge actions.'
+        }
+    ];
+
+    cards.forEach((card) => {
+        grid.appendChild(createCloudflareSummaryCard(card, summary[card.key]));
+    });
+}
+
+function createCloudflareSummaryCard(card, metric) {
+    const element = document.createElement('div');
+    element.className = 'cloudflare-summary-card';
+
+    const title = document.createElement('h3');
+    title.textContent = card.title;
+    title.title = card.info;
+
+    const value = document.createElement('span');
+    value.className = 'cloudflare-summary-value';
+
+    const note = document.createElement('small');
+
+    if (metric?.status === 'available') {
+        value.textContent = formatCloudflareMetric(metric.value, card.format);
+        note.textContent = card.info;
+    } else {
+        value.textContent = 'Not available';
+        value.dataset.state = 'not-available';
+        note.textContent = metric?.reason || 'Not supported by this Cloudflare plan or dataset.';
+    }
+
+    element.appendChild(title);
+    element.appendChild(value);
+    element.appendChild(note);
+
+    return element;
+}
+
+function renderCloudflareCharts(timeseries) {
+    const points = Array.isArray(timeseries?.points) ? timeseries.points : [];
+    const meta = document.getElementById('cloudflareTimeseriesMeta');
+
+    if (meta) {
+        meta.textContent = timeseries?.interval ? `${timeseries.interval} view` : '';
+    }
+
+    if (timeseries?.status !== 'available' || !points.length) {
+        destroyCloudflareChart('requests');
+        destroyCloudflareChart('cache');
+        setCloudflareCanvasHidden('cloudflareRequestsChart', true);
+        setCloudflareCanvasHidden('cloudflareCacheChart', true);
+        setCloudflareFallback('cloudflareRequestsChartFallback', timeseries?.reason || 'No Cloudflare request data is available for this range.');
+        setCloudflareFallback('cloudflareCacheChartFallback', 'Cache time-series data is not available for this range.');
+        return;
+    }
+
+    hideCloudflareFallback('cloudflareRequestsChartFallback');
+    renderCloudflareRequestsChart(points);
+
+    const hasCacheSeries = points.some((point) => point.cached_requests !== null || point.uncached_requests !== null);
+
+    if (hasCacheSeries) {
+        hideCloudflareFallback('cloudflareCacheChartFallback');
+        renderCloudflareCacheChart(points);
+    } else {
+        destroyCloudflareChart('cache');
+        setCloudflareCanvasHidden('cloudflareCacheChart', true);
+        setCloudflareFallback('cloudflareCacheChartFallback', 'Cache time-series data is not available for this Cloudflare plan or dataset.');
+    }
+}
+
+function renderCloudflareRequestsChart(points) {
+    if (typeof Chart === 'undefined') {
+        destroyCloudflareChart('requests');
+        setCloudflareCanvasHidden('cloudflareRequestsChart', true);
+        setCloudflareFallback('cloudflareRequestsChartFallback', 'Chart.js is unavailable. Use the tables below for Cloudflare analytics.');
+        return;
+    }
+
+    const canvas = document.getElementById('cloudflareRequestsChart');
+
+    if (!canvas) return;
+
+    setCloudflareCanvasHidden('cloudflareRequestsChart', false);
+    destroyCloudflareChart('requests');
+
+    cloudflareAnalyticsState.charts.requests = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: points.map((point) => point.label),
+            datasets: [
+                {
+                    label: 'Requests',
+                    data: points.map((point) => Number(point.requests || 0)),
+                    borderColor: '#1687C9',
+                    backgroundColor: 'rgba(22, 135, 201, 0.12)',
+                    tension: 0.25,
+                    fill: true,
+                    yAxisID: 'requests'
+                },
+                {
+                    label: 'Bandwidth MB',
+                    data: points.map((point) => Number(point.bandwidth_bytes || 0) / (1024 * 1024)),
+                    borderColor: '#D84B3D',
+                    backgroundColor: 'rgba(216, 75, 61, 0.12)',
+                    tension: 0.25,
+                    fill: false,
+                    yAxisID: 'bandwidth'
+                }
+            ]
+        },
+        options: cloudflareChartOptions('Requests', 'MB')
+    });
+}
+
+function renderCloudflareCacheChart(points) {
+    if (typeof Chart === 'undefined') {
+        destroyCloudflareChart('cache');
+        setCloudflareCanvasHidden('cloudflareCacheChart', true);
+        setCloudflareFallback('cloudflareCacheChartFallback', 'Chart.js is unavailable. Cache totals remain available in the summary cards.');
+        return;
+    }
+
+    const canvas = document.getElementById('cloudflareCacheChart');
+
+    if (!canvas) return;
+
+    setCloudflareCanvasHidden('cloudflareCacheChart', false);
+    destroyCloudflareChart('cache');
+
+    cloudflareAnalyticsState.charts.cache = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: points.map((point) => point.label),
+            datasets: [
+                {
+                    label: 'Cached',
+                    data: points.map((point) => Number(point.cached_requests || 0)),
+                    backgroundColor: 'rgba(42, 157, 143, 0.72)'
+                },
+                {
+                    label: 'Uncached',
+                    data: points.map((point) => Number(point.uncached_requests || 0)),
+                    backgroundColor: 'rgba(244, 162, 97, 0.78)'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: {
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function cloudflareChartOptions(leftTitle, rightTitle) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        },
+        scales: {
+            x: {
+                ticks: {
+                    maxRotation: 0,
+                    autoSkip: true,
+                    maxTicksLimit: 8
+                }
+            },
+            requests: {
+                type: 'linear',
+                beginAtZero: true,
+                position: 'left',
+                title: {
+                    display: true,
+                    text: leftTitle
+                }
+            },
+            bandwidth: {
+                type: 'linear',
+                beginAtZero: true,
+                position: 'right',
+                grid: {
+                    drawOnChartArea: false
+                },
+                title: {
+                    display: true,
+                    text: rightTitle
+                }
+            }
+        }
+    };
+}
+
+function renderCloudflareBreakdowns(breakdowns) {
+    const configs = {
+        countries: { label: 'Country', value: 'requests' },
+        status_codes: { label: 'Status', value: 'requests' },
+        hostnames: { label: 'Hostname', value: 'requests' },
+        paths: { label: 'Path', value: 'requests' },
+        browsers: { label: 'Browser', value: 'requests' },
+        devices: { label: 'Device', value: 'requests' },
+        operating_systems: { label: 'Operating System', value: 'requests' },
+        security_actions: { label: 'Action', value: 'events' }
+    };
+
+    Object.entries(configs).forEach(([key, config]) => {
+        renderCloudflareBreakdownTable(key, breakdowns[key], config);
+    });
+}
+
+function renderCloudflareBreakdownTable(key, dataset, config) {
+    const container = document.querySelector(`[data-breakdown-table="${key}"]`);
+
+    if (!container) return;
+
+    clearElement(container);
+
+    if (dataset?.status !== 'available') {
+        const empty = document.createElement('div');
+        empty.className = 'cloudflare-empty-state';
+        empty.textContent = dataset?.reason || 'Not supported by this Cloudflare plan or dataset.';
+        container.appendChild(empty);
+        return;
+    }
+
+    const items = Array.isArray(dataset.items) ? dataset.items : [];
+
+    if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'cloudflare-empty-state';
+        empty.textContent = 'No Cloudflare data returned for this range.';
+        container.appendChild(empty);
+        return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'cloudflare-breakdown-table';
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    [config.label, config.value === 'events' ? 'Events' : 'Requests', 'Bandwidth'].forEach((heading) => {
+        const th = document.createElement('th');
+        th.textContent = heading;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+
+    const tbody = document.createElement('tbody');
+
+    items.forEach((item) => {
+        const row = document.createElement('tr');
+        const label = document.createElement('td');
+        const count = document.createElement('td');
+        const bandwidth = document.createElement('td');
+
+        label.textContent = String(item.label ?? 'Unknown');
+        count.textContent = formatCloudflareMetric(item[config.value] ?? 0, 'number');
+        bandwidth.textContent = item.bandwidth_bytes === undefined ? 'N/A' : formatCloudflareMetric(item.bandwidth_bytes, 'bytes');
+
+        row.appendChild(label);
+        row.appendChild(count);
+        row.appendChild(bandwidth);
+        tbody.appendChild(row);
+    });
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    container.appendChild(table);
+}
+
+function renderCloudflareAnalyticsError(error) {
+    const status = document.getElementById('cloudflareAnalyticsStatus');
+
+    if (status) {
+        status.textContent = error?.message || 'Cloudflare analytics could not be loaded right now.';
+        status.dataset.type = 'error';
+    }
+
+    renderCloudflareWarnings([]);
+    destroyCloudflareChart('requests');
+    destroyCloudflareChart('cache');
+}
+
+function destroyCloudflareChart(key) {
+    if (cloudflareAnalyticsState.charts[key]) {
+        cloudflareAnalyticsState.charts[key].destroy();
+        delete cloudflareAnalyticsState.charts[key];
+    }
+}
+
+function setCloudflareFallback(id, message) {
+    const fallback = document.getElementById(id);
+
+    if (!fallback) return;
+
+    fallback.textContent = message;
+    fallback.hidden = false;
+}
+
+function hideCloudflareFallback(id) {
+    const fallback = document.getElementById(id);
+
+    if (!fallback) return;
+
+    fallback.hidden = true;
+    fallback.textContent = '';
+}
+
+function setCloudflareCanvasHidden(id, hidden) {
+    const canvas = document.getElementById(id);
+
+    if (!canvas) return;
+
+    canvas.hidden = hidden;
+}
+
+function clearElement(element) {
+    while (element.firstChild) {
+        element.removeChild(element.firstChild);
+    }
+}
+
+function formatCloudflareMetric(value, type) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return 'N/A';
+    }
+
+    if (type === 'bytes') {
+        return formatCloudflareBytes(number);
+    }
+
+    if (type === 'percent') {
+        return `${number.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`;
+    }
+
+    return number.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function formatCloudflareBytes(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = Math.max(0, Number(bytes) || 0);
+    let unitIndex = 0;
+
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+    }
+
+    return `${value.toLocaleString('en-US', { maximumFractionDigits: value >= 10 ? 1 : 2 })} ${units[unitIndex]}`;
+}
+
+function formatCloudflareTimestamp(value) {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return 'recently';
+    }
+
+    return date.toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+    });
+}
+
+function cloudflareDateInputValue(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
 }
 
 function adminProductImageSrc(imageName) {

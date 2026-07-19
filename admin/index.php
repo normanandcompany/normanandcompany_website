@@ -9,6 +9,17 @@
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 
 requireRole('admin');
+
+$adminCssVersion = (string) @filemtime($_SERVER['DOCUMENT_ROOT'] . '/admin/css/admin.css');
+$adminJsVersion = (string) @filemtime($_SERVER['DOCUMENT_ROOT'] . '/admin/js/admin.js');
+
+if ($adminCssVersion === '') {
+    $adminCssVersion = '1';
+}
+
+if ($adminJsVersion === '') {
+    $adminJsVersion = '1';
+}
 ?>
 
 <!DOCTYPE html>
@@ -24,9 +35,12 @@ requireRole('admin');
     <meta name="author" content="Norman and Company">
 
     <link rel="canonical" href="https://www.normanandcompany.com/">
-    <link rel="stylesheet" href="/admin/css/admin.css">
-    <link rel="manifest" href="/site.webmanifest">
-    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/admin/css/admin.css?v=<?php echo htmlspecialchars($adminCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="icon" href="/favicon.ico?v=20260719" type="image/x-icon" sizes="any">
+    <link rel="icon" href="/images/favicon-32x32.png?v=20260719" type="image/png" sizes="32x32">
+    <link rel="icon" href="/images/favicon-16x16.png?v=20260719" type="image/png" sizes="16x16">
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png?v=20260719" sizes="180x180">
+    <link rel="manifest" href="/site.webmanifest?v=20260719">
 
     <meta property="og:title" content="Norman and Company">
     <meta property="og:description" content="Trusted Caribbean travel resources and cruise insights.">
@@ -43,7 +57,8 @@ requireRole('admin');
     }
     </script>
 
-    <script src="/admin/js/admin.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" defer></script>
+    <script src="/admin/js/admin.js?v=<?php echo htmlspecialchars($adminJsVersion, ENT_QUOTES, 'UTF-8'); ?>" defer></script>
 </head>
 <body>
 

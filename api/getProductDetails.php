@@ -48,6 +48,31 @@ function productDetailsSelectSql(string $whereClause): string
     ";
 }
 
+function incrementProductView(PDO $pdo, int $productId): void
+{
+    $stmt = $pdo->prepare("
+        INSERT INTO product_views (
+            product_id,
+            view_count,
+            first_viewed_at,
+            last_viewed_at
+        )
+        VALUES (
+            :product_id,
+            1,
+            NOW(),
+            NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            view_count = view_count + 1,
+            last_viewed_at = VALUES(last_viewed_at)
+    ");
+
+    $stmt->execute([
+        ':product_id' => $productId
+    ]);
+}
+
 try {
     $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -82,6 +107,10 @@ try {
         ]);
 
         $formatOptions = $formatStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    if ($product) {
+        incrementProductView($pdo, (int) $product['id']);
     }
 
     echo json_encode([
