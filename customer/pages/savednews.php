@@ -1,0 +1,2 @@
+<?php require_once $_SERVER['DOCUMENT_ROOT'].'/api/auth.php';requireRole('customer');?>
+<section class="customer-news" id="customerSavedNews"><div id="page-title-meta" data-title="Norman and Company | Saved News" hidden></div><h1>Saved News</h1><label>Sort <select id="savedNewsSort"><option value="saved">Recently saved</option><option value="published">Publication date</option></select></label><div id="customerNewsAlert" role="status" aria-live="polite"></div><div class="customer-news-grid" id="customerSavedFeed"><p>Loading saved stories…</p></div></section>

@@ -1,0 +1,2 @@
+<?php require_once $_SERVER['DOCUMENT_ROOT'].'/api/auth.php';requireRole('customer');?>
+<section class="customer-news" id="customerMyNews"><div id="page-title-meta" data-title="Norman and Company | My News" hidden></div><h1>My News</h1><p>A personalized feed based primarily on the interests you explicitly follow.</p><div id="customerNewsAlert" role="status" aria-live="polite"></div><div class="customer-news-grid" id="customerNewsFeed"><p>Loading recommendations…</p></div></section>

@@ -15,6 +15,7 @@ async function loadPage(pageName, options = {}) {
 
         const publicStorePages = ['travelstore', 'productdetails'];
         const shouldUseCustomerPage = isCustomerArea()
+            && !options.publicPage
             && !publicStorePages.includes(pageName);
         const pagePath = shouldUseCustomerPage
             ? `/customer/pages/${pageName}.php`
@@ -37,6 +38,18 @@ async function loadPage(pageName, options = {}) {
                 // Page loader for cruise lines data
                 case 'cruiselines':
                     loadCruiseLines();
+                    break;
+
+                case 'portinfo':
+                    loadPorts();
+                    break;
+
+                case 'port':
+                    loadPortPage(options.portId || null);
+                    break;
+
+                case 'ship':
+                    loadShipPage(options.shipId || null);
                     break;
 
                 // Page loader for resorts data
@@ -68,6 +81,18 @@ async function loadPage(pageName, options = {}) {
                 case 'blog':
                     initBlogArticles();
                     break;
+
+                case 'home':
+                    if (isCustomerArea()) {
+                        initCustomerProfile();
+                        initCustomerNews('profile');
+                    }
+                    break;
+                case 'newspreferences':
+                case 'mynews':
+                case 'savednews':
+                    initCustomerNews(pageName);
+                    break;
                     
                 // Page loaders for future pages
                 // case 'travelstore':
@@ -75,14 +100,27 @@ async function loadPage(pageName, options = {}) {
                 //     break;
 
                 default:
+                    loadCruiseLinePage();
                     break;
             }
 
         // Update document title
         updatePageTitle();
 
-        // Scroll to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const shouldFocusNewsPreferences = pageName === 'home'
+            && isCustomerArea()
+            && new URLSearchParams(window.location.search).get('section') === 'news';
+
+        if (shouldFocusNewsPreferences) {
+            window.setTimeout(() => {
+                document.getElementById('customerNewsPreferences')?.scrollIntoView({
+                    behavior: 'auto',
+                    block: 'start'
+                });
+            }, 150);
+        } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
 
     } catch (error) {
         console.error('Error loading page:', error);
@@ -117,7 +155,10 @@ window.addEventListener('DOMContentLoaded', () => {
         'registrationsuccessful.php',
         'registrationfailed.php',
         'blogdetails.php',
-        'products.php'
+        'products.php',
+        'ducks.php',
+        'duckhistory.php'
+        ,'news.php'
     ];
 
     const currentPage = window.location.pathname.split('/').pop();
@@ -126,6 +167,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (currentPage === 'products.php') {
         initTravelStore();
+        updatePageTitle();
+        return;
+    }
+
+    if (currentPage === 'ducks.php' || currentPage === 'duckhistory.php') {
         updatePageTitle();
         return;
     }
@@ -176,16 +222,30 @@ async function loadCruiseLines() {
 
         // Loop through each cruise line
         cruiseLines.forEach(cruise => {
-            // Create card element
-            const card = document.createElement('div');
+            if (!cruise.page) {
+                return;
+            }
+
+            // Make the card itself the link, using the database page value.
+            const card = document.createElement('a');
             card.classList.add('card', 'cruise-line-card');
+            card.href = cruise.page;
+            card.setAttribute('aria-label', `View ${cruise.cruise_line_name}`);
+            card.addEventListener('click', event => {
+                openCruiseLinePage(event, cruise.page);
+            });
 
             // Build card HTML
+            const imageWidth = Number.parseInt(cruise.image_size, 10);
+            const widthAttribute = Number.isFinite(imageWidth) && imageWidth > 0
+                ? ` width="${imageWidth}"`
+                : '';
+
             card.innerHTML = `
-                <img src="/images/cruiselines/${cruise.image_url}" 
-                     alt="${cruise.cruise_line_name}"
+                <img src="${escapeHtml(getDatabaseImageUrl(cruise.image_url, '/images/cruiselines/'))}"
+                     alt="${escapeHtml(cruise.cruise_line_name)}"
                      class="cruise-line-logo"
-                     width="${cruise.image_size}">
+                     ${widthAttribute}>
             `;
 
             // Add card to container
@@ -203,6 +263,431 @@ async function loadCruiseLines() {
             </div>
         `;
     }
+}
+
+function getDatabaseImageUrl(imageUrl, defaultDirectory) {
+    const value = String(imageUrl || '').trim();
+
+    if (!value) {
+        return '';
+    }
+
+    if (/^https?:\/\//i.test(value) || value.startsWith('/')) {
+        return value;
+    }
+
+    return `${defaultDirectory}${value}`;
+}
+
+function getSafeWebsiteUrl(websiteUrl) {
+    const value = String(websiteUrl || '').trim();
+
+    if (/^https?:\/\//i.test(value)) {
+        return value;
+    }
+
+    if (/^(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?:[/?#][^\s]*)?$/i.test(value)) {
+        return `https://${value}`;
+    }
+
+    return '';
+}
+
+function formatDatabaseText(value) {
+    return escapeHtml(String(value || '')).replace(/\r?\n/g, '<br>');
+}
+
+function getPageNameFromPath(pagePath) {
+    const match = String(pagePath || '').match(/^\/pages\/([a-z0-9]+)\.php$/i);
+    return match ? match[1] : '';
+}
+
+function openCruiseLinePage(event, pagePath) {
+    const pageName = getPageNameFromPath(pagePath);
+
+    if (!pageName) {
+        return;
+    }
+
+    event.preventDefault();
+    loadPage(pageName, { publicPage: true });
+}
+
+async function loadCruiseLinePage() {
+    const pageSection = document.querySelector('.cruise-line-detail[data-cruise-line-page]');
+    const container = document.getElementById('cruiseLineDetail');
+
+    if (!pageSection || !container) {
+        return;
+    }
+
+    const pagePath = pageSection.dataset.cruiseLinePage;
+
+    try {
+        const response = await fetch(`/api/getCruiseLinePage.php?page=${encodeURIComponent(pagePath)}`);
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP error! Status: ${response.status}`);
+        }
+
+        renderCruiseLinePage(data.cruise_line, data.ships || [], container);
+    } catch (error) {
+        console.error('Error loading cruise-line page:', error);
+        container.innerHTML = '<div class="card"><p>Unable to load cruise-line data.</p></div>';
+    }
+}
+
+function renderCruiseLinePage(cruiseLine, ships, container) {
+    const logoUrl = getDatabaseImageUrl(cruiseLine.image_url, '/images/cruiselines/');
+    const websiteUrl = getSafeWebsiteUrl(cruiseLine.website_url);
+    const shipCount = Number.parseInt(cruiseLine.ship_count, 10) || 0;
+    const meta = document.getElementById('page-title-meta');
+
+    if (meta) {
+        meta.dataset.title = `Norman and Company | ${cruiseLine.cruise_line_name}`;
+        updatePageTitle();
+    }
+
+    const aboutDetails = [
+        `<p><strong>Cruise Line:</strong> ${formatDatabaseText(cruiseLine.cruise_line_name)}</p>`,
+        cruiseLine.parent_company
+            ? `<p><strong>Parent Company:</strong> ${formatDatabaseText(cruiseLine.parent_company)}</p>`
+            : '',
+        cruiseLine.headquarters_location
+            ? `<p><strong>Headquarters:</strong> ${formatDatabaseText(cruiseLine.headquarters_location)}</p>`
+            : '',
+        websiteUrl
+            ? `<p><strong>Website:</strong> <a href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cruiseLine.website_url)}</a></p>`
+            : ''
+    ].join('');
+
+    const shipLinks = ships.length
+        ? `<ul class="cruise-ship-list">${ships.map(ship => `
+            <li>
+                <a href="/pages/ship.php?id=${encodeURIComponent(ship.id)}"
+                   onclick="openShipPage(event, ${Number.parseInt(ship.id, 10)})">
+                    ${escapeHtml(ship.ship_name)}
+                </a>
+            </li>
+        `).join('')}</ul>`
+        : '';
+
+    container.innerHTML = `
+        <header class="cruise-line-detail-header">
+            ${logoUrl ? `
+                <img src="${escapeHtml(logoUrl)}"
+                     alt="${escapeHtml(cruiseLine.cruise_line_name)} logo"
+                     class="cruise-line-detail-logo">
+            ` : ''}
+        </header>
+
+        <div class="cruise-line-info-grid">
+            <article class="card cruise-line-info-card">
+                <h2>About</h2>
+                ${cruiseLine.description ? `<p>${formatDatabaseText(cruiseLine.description)}</p>` : ''}
+                ${aboutDetails}
+            </article>
+
+            <article class="card cruise-line-info-card">
+                <h2>History</h2>
+                ${cruiseLine.history ? `<p>${formatDatabaseText(cruiseLine.history)}</p>` : ''}
+            </article>
+
+            <article class="card cruise-line-info-card cruise-line-fleet-card">
+                <h2>Fleet</h2>
+                <p><strong>${shipCount}</strong> ${shipCount === 1 ? 'ship' : 'ships'}</p>
+                ${shipLinks}
+            </article>
+
+            <article class="card cruise-line-info-card">
+                <h2>Cruising Areas</h2>
+                ${cruiseLine.cruising_area ? `<p>${formatDatabaseText(cruiseLine.cruising_area)}</p>` : ''}
+            </article>
+        </div>
+    `;
+}
+
+// =========================================
+// PORT CARD AND DETAIL UX
+// =========================================
+
+async function loadPorts() {
+    const container = document.getElementById('portsContainer');
+
+    if (!container) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/getPorts.php');
+        const ports = await response.json();
+
+        if (!response.ok || !Array.isArray(ports)) {
+            throw new Error(ports.error || `HTTP error! Status: ${response.status}`);
+        }
+
+        container.innerHTML = '';
+
+        ports.forEach(port => {
+            const portId = Number.parseInt(port.id, 10);
+
+            if (!portId) {
+                return;
+            }
+
+            const card = document.createElement('a');
+            card.classList.add('card', 'port-card');
+            card.href = `/pages/port.php?id=${encodeURIComponent(portId)}`;
+            card.setAttribute('aria-label', `View ${port.port_name}`);
+            card.addEventListener('click', event => {
+                openPortPage(event, portId);
+            });
+
+            card.innerHTML = `
+                <h2>${formatDatabaseText(port.port_name)}</h2>
+                ${port.city_name ? `<p>${formatDatabaseText(port.city_name)}</p>` : ''}
+                ${port.country_name ? `<p>${formatDatabaseText(port.country_name)}</p>` : ''}
+            `;
+
+            container.appendChild(card);
+        });
+
+        if (!ports.length) {
+            container.innerHTML = '<div class="card"><p>No ports are currently available.</p></div>';
+        }
+    } catch (error) {
+        console.error('Error loading ports:', error);
+        container.innerHTML = '<div class="card"><h3>Error</h3><p>Unable to load port data.</p></div>';
+    }
+}
+
+function openPortPage(event, portId) {
+    event.preventDefault();
+    loadPage('port', {
+        publicPage: true,
+        portId
+    });
+}
+
+async function loadPortPage(portId) {
+    const container = document.getElementById('portDetail');
+    let id = Number.parseInt(portId, 10);
+
+    if (!container) {
+        return;
+    }
+
+    if (!id) {
+        id = Number.parseInt(new URLSearchParams(window.location.search).get('id'), 10);
+    }
+
+    if (!id) {
+        container.innerHTML = '<div class="card"><p>A valid port was not selected.</p></div>';
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/getPortPage.php?id=${encodeURIComponent(id)}`);
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP error! Status: ${response.status}`);
+        }
+
+        renderPortPage(data.port, container);
+    } catch (error) {
+        console.error('Error loading port information:', error);
+        container.innerHTML = '<div class="card"><p>Unable to load port information.</p></div>';
+    }
+}
+
+function renderPortPage(port, container) {
+    const latitude = Number.parseFloat(port.latitude);
+    const longitude = Number.parseFloat(port.longitude);
+    const hasCoordinates = Number.isFinite(latitude)
+        && Number.isFinite(longitude)
+        && latitude >= -90
+        && latitude <= 90
+        && longitude >= -180
+        && longitude <= 180;
+    const meta = document.getElementById('page-title-meta');
+
+    if (meta) {
+        meta.dataset.title = `Norman and Company | ${port.port_name}`;
+        updatePageTitle();
+    }
+
+    const details = [
+        ['Port name', port.port_name],
+        ['City', port.city_name],
+        ['State / Province', port.state_name],
+        ['Country', port.country_name],
+        ['Destination ID', port.destination_id]
+    ].filter(([, value]) => value !== null && value !== undefined && String(value) !== '');
+
+    let mapMarkup = '<p>Map coordinates are not available for this port.</p>';
+
+    if (hasCoordinates) {
+        const latitudeDelta = 0.04;
+        const longitudeDelta = 0.06;
+        const bounds = [
+            longitude - longitudeDelta,
+            latitude - latitudeDelta,
+            longitude + longitudeDelta,
+            latitude + latitudeDelta
+        ].join(',');
+        const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&layer=mapnik&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
+        const fullMapUrl = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=14/${encodeURIComponent(latitude)}/${encodeURIComponent(longitude)}`;
+
+        mapMarkup = `
+            <iframe
+                class="port-map"
+                src="${escapeHtml(mapUrl)}"
+                title="Map showing ${escapeHtml(port.port_name)}"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade">
+            </iframe>
+            <p class="port-map-link">
+                <a href="${escapeHtml(fullMapUrl)}" target="_blank" rel="noopener noreferrer">
+                    View Larger Map
+                </a>
+            </p>
+        `;
+    }
+
+    container.innerHTML = `
+        <p><a href="/pages/portinfo.php" onclick="loadPage('portinfo', { publicPage: true }); return false;">&larr; Back to all ports</a></p>
+
+        <header class="port-detail-header">
+            <div>
+                <h1>${formatDatabaseText(port.port_name)}</h1>
+                ${port.city_name || port.state_name || port.country_name ? `
+                    <p>${[port.city_name, port.state_name, port.country_name]
+                        .filter(Boolean)
+                        .map(formatDatabaseText)
+                        .join(', ')}</p>
+                ` : ''}
+            </div>
+        </header>
+
+        <div class="port-detail-grid">
+            <div class="port-detail-main">
+                <article class="card port-info-card">
+                    <h2>Port Information</h2>
+                    ${port.description ? `<p class="port-description">${formatDatabaseText(port.description)}</p>` : ''}
+                    <dl class="port-facts">
+                        ${details.map(([label, value]) => `
+                            <div>
+                                <dt>${escapeHtml(label)}</dt>
+                                <dd>${formatDatabaseText(value)}</dd>
+                            </div>
+                        `).join('')}
+                    </dl>
+                </article>
+
+                <article class="card port-details-card">
+                    <h2>Port Details</h2>
+                    <ul class="port-detail-links">
+                        <li>
+                            <a href="/pages/portinfo.php" onclick="loadPage('portinfo', { publicPage: true }); return false;">
+                                View All Cruise Ports
+                            </a>
+                        </li>
+                    </ul>
+                </article>
+            </div>
+
+            <article class="card port-map-card">
+                <h2>Map</h2>
+                ${mapMarkup}
+            </article>
+        </div>
+    `;
+}
+
+function openShipPage(event, shipId) {
+    event.preventDefault();
+    loadPage('ship', {
+        publicPage: true,
+        shipId
+    });
+}
+
+async function loadShipPage(shipId) {
+    const container = document.getElementById('shipDetail');
+    const id = Number.parseInt(shipId, 10);
+
+    if (!container) {
+        return;
+    }
+
+    if (!id) {
+        const urlParams = new URLSearchParams(window.location.search);
+        shipId = urlParams.get('id');
+    }
+
+    try {
+        const response = await fetch(`/api/getShipPage.php?id=${encodeURIComponent(shipId)}`);
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP error! Status: ${response.status}`);
+        }
+
+        renderShipPage(data.ship, container);
+    } catch (error) {
+        console.error('Error loading ship page:', error);
+        container.innerHTML = '<div class="card"><p>Unable to load ship data.</p></div>';
+    }
+}
+
+function renderShipPage(ship, container) {
+    const imageUrl = getDatabaseImageUrl(ship.image_url, '/images/ships/');
+    const meta = document.getElementById('page-title-meta');
+
+    if (meta) {
+        meta.dataset.title = `Norman and Company | ${ship.ship_name}`;
+        updatePageTitle();
+    }
+
+    const facts = [
+        ['Cruise line', ship.cruise_line_name],
+        ['Class', ship.ship_class],
+        ['Passenger capacity', ship.passenger_capacity ? Number(ship.passenger_capacity).toLocaleString() : ''],
+        ['Gross tonnage', ship.gross_tonnage ? Number(ship.gross_tonnage).toLocaleString() : ''],
+        ['Launch year', ship.launch_year]
+    ].filter(([, value]) => value !== null && value !== undefined && String(value) !== '');
+
+    container.innerHTML = `
+        <p>
+            <a href="${escapeHtml(ship.cruise_line_page)}"
+               onclick="openCruiseLinePage(event, '${escapeHtml(ship.cruise_line_page)}')">
+                &larr; Back to ${escapeHtml(ship.cruise_line_name)}
+            </a>
+        </p>
+
+        <div class="ship-detail-layout">
+            ${imageUrl ? `
+                <img src="${escapeHtml(imageUrl)}"
+                     alt="${escapeHtml(ship.ship_name)}"
+                     class="ship-detail-image">
+            ` : ''}
+
+            <article class="card ship-detail-card">
+                <h1>${escapeHtml(ship.ship_name)}</h1>
+                <dl class="ship-facts">
+                    ${facts.map(([label, value]) => `
+                        <div>
+                            <dt>${escapeHtml(label)}</dt>
+                            <dd>${escapeHtml(String(value))}</dd>
+                        </div>
+                    `).join('')}
+                </dl>
+                ${ship.description ? `<p>${formatDatabaseText(ship.description)}</p>` : ''}
+            </article>
+        </div>
+    `;
 }
     
 // =========================================
@@ -2205,3 +2690,449 @@ async function initBlogArticles() {
         paginatePreviousBlogArticles(container);
     }
 }
+
+// =========================================
+// CUSTOMER PROFILE UX
+// =========================================
+
+const customerProfileState = {
+    csrfToken: '',
+    catalogs: {},
+    favorites: [],
+    orders: [],
+    profile: {},
+    states: []
+};
+
+const customerFavoriteTypeLabels = {
+    cruise_line: 'Cruise line',
+    ship: 'Ship',
+    destination: 'Destination',
+    itinerary: 'Itinerary',
+    port: 'Port',
+    excursion: 'Shore excursion'
+};
+
+function formatCustomerDate(value, options = {}) {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return '—';
+
+    const match = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const date = match
+        ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+        : new Date(rawValue);
+
+    if (Number.isNaN(date.getTime())) return rawValue;
+
+    return new Intl.DateTimeFormat('en-US', {
+        month: options.short ? 'short' : 'long',
+        day: options.includeDay === false ? undefined : 'numeric',
+        year: 'numeric'
+    }).format(date);
+}
+
+function formatCustomerMoney(value, currencyCode = 'USD') {
+    const amount = Number(value || 0);
+    const currency = /^[A-Z]{3}$/.test(String(currencyCode || '').toUpperCase())
+        ? String(currencyCode).toUpperCase()
+        : 'USD';
+
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency
+    }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function customerProfileInitials(profile) {
+    const first = String(profile?.first_name || '').trim().charAt(0);
+    const last = String(profile?.last_name || '').trim().charAt(0);
+    return `${first}${last}`.toUpperCase() || 'NC';
+}
+
+function customerProfileAddress(profile) {
+    return [
+        profile.address_1,
+        profile.address_2,
+        [profile.city, profile.state_province, profile.postal_code].filter(Boolean).join(', '),
+        profile.country
+    ].filter((part) => String(part || '').trim()).join('<br>');
+}
+
+function setCustomerProfileAlert(message = '', type = 'success') {
+    const alert = document.getElementById('customerProfileAlert');
+    if (!alert) return;
+
+    alert.textContent = message;
+    alert.className = `customer-profile__alert customer-profile__alert--${type}`;
+    alert.hidden = !message;
+}
+
+async function fetchCustomerProfileJson(url, options = {}) {
+    const response = await fetch(url, {
+        credentials: 'same-origin',
+        ...options,
+        headers: {
+            Accept: 'application/json',
+            ...(options.headers || {})
+        }
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data.success === false) {
+        throw new Error(data.message || 'The request could not be completed.');
+    }
+
+    return data;
+}
+
+function renderCustomerProfileDetails(profile) {
+    const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Customer';
+    const details = document.getElementById('customerProfileDetails');
+    const name = document.getElementById('customerProfileName');
+    const avatar = document.getElementById('customerProfileAvatar');
+    const memberSince = document.getElementById('customerMemberSince');
+    const address = customerProfileAddress(profile);
+
+    if (name) name.textContent = fullName;
+    if (avatar) avatar.textContent = customerProfileInitials(profile);
+    if (memberSince) memberSince.textContent = formatCustomerDate(profile.created_at, { includeDay: false, short: true });
+
+    if (details) {
+        details.innerHTML = `
+            <div><dt>Email</dt><dd><a href="mailto:${escapeHtml(profile.email_address)}">${escapeHtml(profile.email_address || '—')}</a></dd></div>
+            <div><dt>Phone</dt><dd>${escapeHtml(profile.phone || '—')}</dd></div>
+            <div><dt>Address</dt><dd>${address ? address.split('<br>').map(escapeHtml).join('<br>') : '—'}</dd></div>
+            <div><dt>Last sign-in</dt><dd>${escapeHtml(formatCustomerDate(profile.last_login_at, { short: true }))}</dd></div>
+        `;
+    }
+}
+
+function setCustomerProfileField(id, value) {
+    const field = document.getElementById(id);
+    if (field) field.value = value ?? '';
+}
+
+function renderCustomerProfileEditForm() {
+    const profile = customerProfileState.profile || {};
+    const stateSelect = document.getElementById('customerStateProvince');
+
+    setCustomerProfileField('customerFirstName', profile.first_name);
+    setCustomerProfileField('customerLastName', profile.last_name);
+    setCustomerProfileField('customerEmailAddress', profile.email_address);
+    setCustomerProfileField('customerPhone', profile.phone);
+    setCustomerProfileField('customerAddress1', profile.address_1);
+    setCustomerProfileField('customerAddress2', profile.address_2);
+    setCustomerProfileField('customerCity', profile.city);
+    setCustomerProfileField('customerPostalCode', profile.postal_code);
+    setCustomerProfileField('customerCountry', profile.country);
+
+    if (stateSelect) {
+        stateSelect.innerHTML = '';
+
+        customerProfileState.states.forEach((state) => {
+            const option = document.createElement('option');
+            option.value = String(state.id);
+            option.textContent = state.label;
+            option.selected = Number(state.id) === Number(profile.state_prov_id);
+            stateSelect.appendChild(option);
+        });
+    }
+}
+
+function openCustomerProfileEditor() {
+    const form = document.getElementById('customerProfileEditForm');
+    const details = document.getElementById('customerProfileDetails');
+    const editButton = document.getElementById('customerProfileEditButton');
+    if (!form || !details || !editButton) return;
+
+    renderCustomerProfileEditForm();
+    details.hidden = true;
+    form.hidden = false;
+    form.setAttribute('aria-hidden', 'false');
+    editButton.hidden = true;
+    editButton.setAttribute('aria-expanded', 'true');
+    document.getElementById('customerFirstName')?.focus();
+}
+
+function closeCustomerProfileEditor(reset = true) {
+    const form = document.getElementById('customerProfileEditForm');
+    const details = document.getElementById('customerProfileDetails');
+    const editButton = document.getElementById('customerProfileEditButton');
+    if (!form || !details || !editButton) return;
+
+    if (reset) renderCustomerProfileEditForm();
+    form.hidden = true;
+    form.setAttribute('aria-hidden', 'true');
+    details.hidden = false;
+    editButton.hidden = false;
+    editButton.setAttribute('aria-expanded', 'false');
+}
+
+async function submitCustomerProfile(form) {
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+    setCustomerProfileAlert();
+
+    try {
+        const result = await fetchCustomerProfileJson('/customer/api/saveProfile.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': customerProfileState.csrfToken },
+            body: new FormData(form)
+        });
+        await loadCustomerProfileData();
+        closeCustomerProfileEditor(false);
+        setCustomerProfileAlert(result.message || 'Account details updated.');
+    } catch (error) {
+        setCustomerProfileAlert(error.message, 'error');
+    } finally {
+        if (submitButton) submitButton.disabled = false;
+    }
+}
+
+function populateCustomerFavoriteOptions() {
+    const typeSelect = document.getElementById('customerFavoriteType');
+    const entitySelect = document.getElementById('customerFavoriteEntity');
+    const submitButton = document.querySelector('#customerFavoriteForm button[type="submit"]');
+    if (!typeSelect || !entitySelect) return;
+
+    const items = customerProfileState.catalogs[typeSelect.value] || [];
+    entitySelect.innerHTML = '';
+
+    if (items.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = `No ${customerFavoriteTypeLabels[typeSelect.value]?.toLowerCase() || 'items'} available`;
+        entitySelect.appendChild(option);
+        entitySelect.disabled = true;
+        if (submitButton) submitButton.disabled = true;
+        return;
+    }
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select an item';
+    entitySelect.appendChild(placeholder);
+
+    items.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = String(item.id);
+        option.textContent = item.label;
+        entitySelect.appendChild(option);
+    });
+
+    entitySelect.disabled = false;
+    if (submitButton) submitButton.disabled = false;
+}
+
+function renderCustomerFavorites() {
+    const container = document.getElementById('customerFavoritesList');
+    const count = document.getElementById('customerFavoriteCount');
+    if (count) count.textContent = String(customerProfileState.favorites.length);
+    if (!container) return;
+
+    if (customerProfileState.favorites.length === 0) {
+        container.innerHTML = '<p class="customer-profile__empty">You have not saved any travel favorites yet.</p>';
+        return;
+    }
+
+    container.innerHTML = customerProfileState.favorites.map((favorite) => `
+        <div class="customer-profile__favorite">
+            <div>
+                <span>${escapeHtml(customerFavoriteTypeLabels[favorite.favorite_type] || 'Favorite')}</span>
+                <strong>${escapeHtml(favorite.label || 'Saved item')}</strong>
+            </div>
+            <button type="button" class="customer-profile__remove-favorite" data-favorite-id="${Number(favorite.id)}" aria-label="Remove ${escapeHtml(favorite.label || 'favorite')}">
+                Remove
+            </button>
+        </div>
+    `).join('');
+}
+
+function renderCustomerOrders() {
+    const container = document.getElementById('customerOrdersList');
+    const count = document.getElementById('customerOrderCount');
+    if (count) count.textContent = String(customerProfileState.orders.length);
+    if (!container) return;
+
+    if (customerProfileState.orders.length === 0) {
+        container.innerHTML = '<p class="customer-profile__empty">No purchases are associated with this account yet.</p>';
+        return;
+    }
+
+    container.innerHTML = customerProfileState.orders.map((order) => {
+        const currency = order.currency_code || order.items?.[0]?.currency_code || 'USD';
+        const status = order.transaction_status || order.order_status || 'Processing';
+        const statusClass = String(status).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const items = Array.isArray(order.items) ? order.items : [];
+        const itemMarkup = items.length > 0
+            ? `<ul>${items.map((item) => `
+                <li>
+                    <div>
+                        <strong>${escapeHtml(item.product_name)}</strong>
+                        <span>${Number(item.quantity)} × ${escapeHtml(formatCustomerMoney(item.unit_price, item.currency_code || currency))}${item.product_options ? ` · ${escapeHtml(item.product_options)}` : ''}</span>
+                    </div>
+                    <strong>${escapeHtml(formatCustomerMoney(item.line_subtotal, item.currency_code || currency))}</strong>
+                </li>
+            `).join('')}</ul>`
+            : '<p class="customer-profile__order-empty">Item details are not available for this order.</p>';
+
+        return `
+            <details class="customer-profile__order">
+                <summary>
+                    <div>
+                        <strong>Order ${escapeHtml(order.order_number || `#${order.id}`)}</strong>
+                        <span>${escapeHtml(formatCustomerDate(order.created_at, { short: true }))}</span>
+                    </div>
+                    <div class="customer-profile__order-summary">
+                        <span class="customer-profile__status customer-profile__status--${statusClass}">${escapeHtml(status)}</span>
+                        <strong>${escapeHtml(formatCustomerMoney(order.total_amount, currency))}</strong>
+                    </div>
+                </summary>
+                <div class="customer-profile__order-body">
+                    ${itemMarkup}
+                    <dl>
+                        <div><dt>Subtotal</dt><dd>${escapeHtml(formatCustomerMoney(order.subtotal_amount, currency))}</dd></div>
+                        <div><dt>Shipping</dt><dd>${escapeHtml(formatCustomerMoney(order.shipping_amount, currency))}</dd></div>
+                        <div><dt>Tax</dt><dd>${escapeHtml(formatCustomerMoney(order.tax_amount, currency))}</dd></div>
+                        <div><dt>Total</dt><dd>${escapeHtml(formatCustomerMoney(order.total_amount, currency))}</dd></div>
+                    </dl>
+                </div>
+            </details>
+        `;
+    }).join('');
+}
+
+async function loadCustomerProfileData() {
+    const data = await fetchCustomerProfileJson('/customer/api/getProfile.php');
+    customerProfileState.csrfToken = data.csrf_token || '';
+    customerProfileState.catalogs = data.catalogs || {};
+    customerProfileState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+    customerProfileState.orders = Array.isArray(data.orders) ? data.orders : [];
+    customerProfileState.profile = data.profile || {};
+    customerProfileState.states = Array.isArray(data.states) ? data.states : [];
+
+    renderCustomerProfileDetails(customerProfileState.profile);
+    renderCustomerProfileEditForm();
+    populateCustomerFavoriteOptions();
+    renderCustomerFavorites();
+    renderCustomerOrders();
+}
+
+async function submitCustomerFavorite(form) {
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+
+    try {
+        const result = await fetchCustomerProfileJson('/customer/api/saveFavorite.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': customerProfileState.csrfToken },
+            body: new FormData(form)
+        });
+        await loadCustomerProfileData();
+        setCustomerProfileAlert(result.message || 'Favorite added.');
+    } catch (error) {
+        setCustomerProfileAlert(error.message, 'error');
+    } finally {
+        if (submitButton) submitButton.disabled = false;
+        populateCustomerFavoriteOptions();
+    }
+}
+
+async function removeCustomerFavorite(favoriteId, button) {
+    button.disabled = true;
+    const body = new FormData();
+    body.append('favorite_id', String(favoriteId));
+
+    try {
+        const result = await fetchCustomerProfileJson('/customer/api/deleteFavorite.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': customerProfileState.csrfToken },
+            body
+        });
+        await loadCustomerProfileData();
+        setCustomerProfileAlert(result.message || 'Favorite removed.');
+    } catch (error) {
+        button.disabled = false;
+        setCustomerProfileAlert(error.message, 'error');
+    }
+}
+
+async function initCustomerProfile() {
+    const page = document.getElementById('customerProfilePage');
+    if (!page) return;
+
+    const loading = document.getElementById('customerProfileLoading');
+    const content = document.getElementById('customerProfileContent');
+    const form = document.getElementById('customerFavoriteForm');
+    const typeSelect = document.getElementById('customerFavoriteType');
+    const favorites = document.getElementById('customerFavoritesList');
+    const editButton = document.getElementById('customerProfileEditButton');
+    const cancelEditButton = document.getElementById('customerProfileCancelEdit');
+    const profileForm = document.getElementById('customerProfileEditForm');
+
+    if (typeSelect) typeSelect.addEventListener('change', populateCustomerFavoriteOptions);
+    if (editButton) editButton.addEventListener('click', openCustomerProfileEditor);
+    if (cancelEditButton) cancelEditButton.addEventListener('click', () => closeCustomerProfileEditor());
+    if (profileForm) profileForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitCustomerProfile(profileForm);
+    });
+    if (form) form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitCustomerFavorite(form);
+    });
+    if (favorites) favorites.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-favorite-id]');
+        if (button) removeCustomerFavorite(button.dataset.favoriteId, button);
+    });
+
+    try {
+        await loadCustomerProfileData();
+        closeCustomerProfileEditor(false);
+        if (content) content.hidden = false;
+        if (loading) loading.hidden = true;
+    } catch (error) {
+        if (loading) loading.hidden = true;
+        setCustomerProfileAlert(error.message || 'Unable to load your profile.', 'error');
+    }
+}
+// =========================================
+// CUSTOMER NEWS PERSONALIZATION
+// =========================================
+const customerNewsState = { csrf: '', bootstrap: null, previewRequestId: 0 };
+async function customerNewsRequest(action, method = 'GET', data = null) {
+    const response = await fetch(`/customer/api/news.php?action=${encodeURIComponent(action)}`, {method,headers:method==='GET'?{}:{'Content-Type':'application/json','X-CSRF-Token':customerNewsState.csrf},body:method==='GET'?undefined:JSON.stringify(data||{})});
+    const payload=await response.json();if(!response.ok||!payload.success)throw new Error(payload.message||'News request failed.');return payload;
+}
+function customerNewsEscape(value){return String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function customerNewsMessage(message,isError=false){const el=document.getElementById('customerNewsAlert');if(el){el.textContent=message;el.hidden=false;el.classList.toggle('is-error',isError);el.classList.toggle('customer-profile__alert--error',isError);}}
+async function initCustomerNews(pageName){
+ try{const boot=await customerNewsRequest('bootstrap');customerNewsState.csrf=boot.csrf_token;customerNewsState.bootstrap=boot;if(pageName==='newspreferences'||pageName==='profile')initNewsPreferences();if(pageName==='mynews')loadMyNews();if(pageName==='savednews')loadSavedNews();}catch(error){customerNewsMessage(error.message,true);}
+}
+function initNewsPreferences(){
+ const b=customerNewsState.bootstrap,form=document.getElementById('newsPreferenceForm'),type=form.elements.preference_type,selection=form.elements.selection;
+ if(type.value==='entity'&&!b.entities.length)type.value='category';
+ const fill=()=>{const rows=type.value==='entity'?b.entities:type.value==='category'?b.categories:b.keywords;selection.innerHTML=rows.map(r=>`<option value="${r.id}">${customerNewsEscape(r.entity_name||r.category_name||r.keyword_name)} (${customerNewsEscape(r.entity_type||r.news_type||r.keyword_type)})</option>`).join('');loadNewsPreferencePreview(type,selection);};type.addEventListener('change',fill);selection.addEventListener('change',()=>loadNewsPreferencePreview(type,selection));fill();renderNewsPreferences();
+ const settings=b.settings,privacy=document.getElementById('newsPrivacyForm');privacy.elements.personalization_enabled.checked=Number(settings.personalization_enabled)===1;privacy.elements.history_enabled.checked=Number(settings.history_enabled)===1;privacy.elements.news_type_preference.value=settings.news_type_preference||'both';
+ form.addEventListener('submit',async e=>{e.preventDefault();const kind=type.value,id=Number(selection.value),data={preference_type:kind,priority_level:form.elements.priority_level.value};data[`${kind}_id`]=id;try{await customerNewsRequest('save_preference','POST',data);await refreshNewsPreferences();await loadNewsPreferencePreview(type,selection);customerNewsMessage('Interest followed. Matching news is shown below.');}catch(error){customerNewsMessage(error.message,true);}});
+ privacy.addEventListener('submit',async e=>{e.preventDefault();try{await customerNewsRequest('save_settings','POST',{personalization_enabled:privacy.elements.personalization_enabled.checked,history_enabled:privacy.elements.history_enabled.checked,news_type_preference:privacy.elements.news_type_preference.value});customerNewsMessage('News settings saved.');}catch(error){customerNewsMessage(error.message,true);}});
+ document.getElementById('clearNewsHistory').addEventListener('click',async()=>{try{await customerNewsRequest('clear_history','POST',{});customerNewsMessage('News-view history deleted.');}catch(error){customerNewsMessage(error.message,true);}});
+ document.getElementById('newsAlertForm').addEventListener('submit',async e=>{e.preventDefault();try{await customerNewsRequest('create_alert','POST',{alert_name:e.currentTarget.elements.alert_name.value,frequency:e.currentTarget.elements.frequency.value});customerNewsMessage('Digest preference created.');}catch(error){customerNewsMessage(error.message,true);}});
+ document.getElementById('newsPreferenceList').addEventListener('click',async e=>{const button=e.target.closest('[data-remove-preference]');if(!button)return;await customerNewsRequest('remove_preference','POST',{id:button.dataset.removePreference});await refreshNewsPreferences();});
+}
+async function loadNewsPreferencePreview(typeSelect,selectionSelect){
+ const target=document.getElementById('newsPreferencePreview'),status=document.getElementById('newsPreferencePreviewStatus');if(!target||!status)return;
+ const kind=typeSelect.value,id=String(selectionSelect.value||''),b=customerNewsState.bootstrap;
+ const rows=kind==='entity'?b.entities:kind==='category'?b.categories:b.keywords,row=rows.find(item=>String(item.id)===id);
+ if(!row){target.innerHTML='';status.textContent='Select an interest to see matching published stories.';return;}
+ const label=row.entity_name||row.category_name||row.keyword_name,params=new URLSearchParams({limit:'6'});
+ if(kind==='entity')params.set('entity',row.entity_slug);else if(kind==='category')params.set('category',row.category_slug);else params.set('q',row.keyword_name);
+ const requestId=++customerNewsState.previewRequestId;status.textContent=`Loading news about ${label}…`;target.innerHTML='';
+ try{const response=await fetch(`/api/news/search.php?${params.toString()}`,{credentials:'same-origin'}),data=await response.json();if(!response.ok||!data.success)throw new Error(data.message||'Matching news could not be loaded.');if(requestId!==customerNewsState.previewRequestId)return;status.textContent=data.articles.length?`Showing published news about ${label}.`:`No published news currently matches ${label}.`;target.innerHTML=data.articles.map(a=>customerNewsCard(a)).join('');bindCustomerNewsActions(target);}catch(error){if(requestId!==customerNewsState.previewRequestId)return;status.textContent=error.message;target.innerHTML='';}
+}
+async function refreshNewsPreferences(){const boot=await customerNewsRequest('bootstrap');customerNewsState.csrf=boot.csrf_token;customerNewsState.bootstrap=boot;renderNewsPreferences();}
+function renderNewsPreferences(){const b=customerNewsState.bootstrap,names=new Map([...b.entities.map(x=>[String(x.id),x.entity_name]),...b.categories.map(x=>[String(x.id),x.category_name]),...b.keywords.map(x=>[String(x.id),x.keyword_name])]);document.getElementById('newsPreferenceList').innerHTML=b.preferences.length?b.preferences.map(p=>`<div class="customer-news-interest customer-profile__favorite"><div><strong>${customerNewsEscape(names.get(String(p.entity_id||p.category_id||p.keyword_id))||p.preference_value)}</strong><span>Priority ${p.priority_level}</span></div><button class="customer-profile__remove-favorite" type="button" data-remove-preference="${p.id}">Unfollow</button></div>`).join(''):'<p class="customer-profile__empty">You are not following any news interests yet.</p>';document.getElementById('newsAlertList').innerHTML=b.alerts.length?`<h3>Current digests</h3>${b.alerts.map(a=>`<p>${customerNewsEscape(a.alert_name)} — ${customerNewsEscape(a.frequency)}${Number(a.is_active)?'':' (disabled)'}</p>`).join('')}`:'';}
+function customerNewsCard(a,saved=false){return `<article class="customer-news-card"><div><span>${customerNewsEscape(a.category_name||a.news_type)}</span><h2><a href="/news.php?article=${encodeURIComponent(a.slug)}">${customerNewsEscape(a.headline)}</a></h2><p>${customerNewsEscape(a.summary)}</p><small>${customerNewsEscape(a.source_name||'Norman and Company')} · ${customerNewsEscape(a.source_published_at||a.published_at||'')}</small>${a.recommendation_reason?`<p class="recommendation-reason">${customerNewsEscape(a.recommendation_reason)}</p>`:''}</div><div class="customer-news-actions">${saved?`<textarea aria-label="Private note" data-news-note>${customerNewsEscape(a.notes||'')}</textarea><button data-news-unsave="${a.id}">Remove</button>`:`<button data-news-save="${a.id}">Save</button><button data-news-hide="${a.id}">Not relevant</button>`}</div></article>`;}
+function bindCustomerNewsActions(target){if(target.dataset.newsActionsBound==='true')return;target.dataset.newsActionsBound='true';target.addEventListener('click',async e=>{const save=e.target.closest('[data-news-save]'),hide=e.target.closest('[data-news-hide]');try{if(save){await customerNewsRequest('save_article','POST',{article_id:save.dataset.newsSave});customerNewsMessage('Article saved.');}if(hide){await customerNewsRequest('hide_article','POST',{article_id:hide.dataset.newsHide,reason:'not_relevant'});hide.closest('article')?.remove();}}catch(error){customerNewsMessage(error.message,true);}});}
+async function loadMyNews(){const target=document.getElementById('customerNewsFeed');try{const data=await customerNewsRequest('feed');target.innerHTML=data.articles.length?data.articles.map(a=>customerNewsCard(a)).join(''):'<p>No recommendations are available yet. Follow interests in News Preferences.</p>';bindCustomerNewsActions(target);}catch(error){target.innerHTML=`<p>${customerNewsEscape(error.message)}</p>`;}}
+async function loadSavedNews(){const target=document.getElementById('customerSavedFeed'),sort=document.getElementById('savedNewsSort');const load=async()=>{try{const response=await fetch(`/customer/api/news.php?action=saved&sort=${encodeURIComponent(sort.value)}`),data=await response.json();if(!response.ok||!data.success)throw new Error(data.message);target.innerHTML=data.articles.length?data.articles.map(a=>customerNewsCard(a,true)).join(''):'<p>You have no saved news yet.</p>';}catch(error){target.innerHTML=`<p>${customerNewsEscape(error.message)}</p>`;}};sort.addEventListener('change',load);target.addEventListener('click',async e=>{const button=e.target.closest('[data-news-unsave]');if(!button)return;await customerNewsRequest('unsave_article','POST',{article_id:button.dataset.newsUnsave});button.closest('article').remove();});target.addEventListener('change',async e=>{const note=e.target.closest('[data-news-note]');if(!note)return;const id=note.closest('article').querySelector('[data-news-unsave]').dataset.newsUnsave;await customerNewsRequest('save_article','POST',{article_id:id,notes:note.value});});load();}

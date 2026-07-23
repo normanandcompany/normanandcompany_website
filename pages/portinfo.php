@@ -15,12 +15,7 @@
 
     <h1>Cruise Port Information</h1>
 
-    <ul>
-        <li>Passport Holder</li>
-        <li>Portable Charger</li>
-        <li>Travel Backpack</li>
-        <li>Waterproof Phone Case</li>
-    </ul>
+    <div id="portsContainer" class="card-grid">
+        <p id="loadingMessage">Loading ports...</p>
+    </div>
 </section>
-
-</main>

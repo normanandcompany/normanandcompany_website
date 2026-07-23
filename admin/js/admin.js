@@ -35,9 +35,23 @@ async function loadPage(pageName) {
                 loadUsers();
                 break;
 
+            // Page loader for task data
+            case 'tasks':
+                loadTasks();
+                break;
+
+            // Page loader for transaction data
+            case 'transactions':
+                loadTransactions();
+                break;
+
             // Page loader for blog post data
             case 'blogposts':
                 loadBlogPosts();
+                break;
+
+            case 'news':
+                initNewsAdmin();
                 break;
 
             // Page loader for resorts data
@@ -667,6 +681,23 @@ const userManagerState = {
     filteredUsers: [],
     roles: [],
     states: [],
+    currentPage: 1,
+    perPage: 10
+};
+
+const taskManagerState = {
+    tasks: [],
+    filteredTasks: [],
+    users: [],
+    currentPage: 1,
+    perPage: 10
+};
+
+const transactionManagerState = {
+    transactions: [],
+    filteredTransactions: [],
+    statuses: [],
+    types: [],
     currentPage: 1,
     perPage: 10
 };
@@ -3469,3 +3500,1402 @@ async function refreshUsers() {
     userManagerState.users = Array.isArray(users) ? users : [];
     applyUserFilters();
 }
+
+// =====================================
+// Task Manager
+// =====================================
+
+async function loadTasks() {
+    const tbody = document.getElementById('tasksTableBody');
+
+    if (!tbody) return;
+
+    bindTaskManagerEvents();
+    setTaskTableLoading();
+
+    try {
+        const [tasks, users] = await Promise.all([
+            fetchAdminJson('/admin/api/getTasks.php'),
+            fetchAdminJson('/admin/api/getTaskUsers.php')
+        ]);
+
+        taskManagerState.tasks = Array.isArray(tasks) ? tasks : [];
+        taskManagerState.users = Array.isArray(users) ? users : [];
+        taskManagerState.currentPage = 1;
+
+        populateTaskUserControls();
+        applyTaskFilters();
+    } catch (error) {
+        console.error('Error loading tasks:', error);
+        setTaskTableLoading('Unable to load tasks.');
+        showTaskAlert(error.message || 'Unable to load tasks.', 'error');
+    }
+}
+
+function bindTaskManagerEvents() {
+    const addButton = document.getElementById('addTaskBtn');
+    const searchInput = document.getElementById('taskSearchInput');
+    const userFilter = document.getElementById('taskUserFilter');
+    const statusFilter = document.getElementById('taskStatusFilter');
+    const priorityFilter = document.getElementById('taskPriorityFilter');
+    const resetButton = document.getElementById('resetTaskFiltersBtn');
+    const prevButton = document.getElementById('taskPrevPageBtn');
+    const nextButton = document.getElementById('taskNextPageBtn');
+    const tbody = document.getElementById('tasksTableBody');
+    const form = document.getElementById('taskForm');
+    const cancelButton = document.getElementById('cancelTaskBtn');
+    const closeButton = document.getElementById('closeTaskDialogBtn');
+    const dialog = document.getElementById('taskFormDialog');
+    const previewFields = [
+        document.getElementById('taskTitle'),
+        document.getElementById('taskUserId'),
+        document.getElementById('taskDueAt'),
+        document.getElementById('taskStatus'),
+        document.getElementById('taskRecurring'),
+        document.getElementById('taskRecurrenceFrequency'),
+        document.getElementById('taskRecurrenceInterval'),
+        document.getElementById('taskRecurrenceCount')
+    ];
+
+    addButton?.addEventListener('click', () => openTaskForm());
+    searchInput?.addEventListener('input', () => {
+        taskManagerState.currentPage = 1;
+        applyTaskFilters();
+    });
+    userFilter?.addEventListener('change', () => {
+        taskManagerState.currentPage = 1;
+        applyTaskFilters();
+    });
+    statusFilter?.addEventListener('change', () => {
+        taskManagerState.currentPage = 1;
+        applyTaskFilters();
+    });
+    priorityFilter?.addEventListener('change', () => {
+        taskManagerState.currentPage = 1;
+        applyTaskFilters();
+    });
+    resetButton?.addEventListener('click', () => {
+        if (searchInput) searchInput.value = '';
+        if (userFilter) userFilter.value = 'all';
+        if (statusFilter) statusFilter.value = 'all';
+        if (priorityFilter) priorityFilter.value = 'all';
+        taskManagerState.currentPage = 1;
+        applyTaskFilters();
+    });
+    prevButton?.addEventListener('click', () => {
+        if (taskManagerState.currentPage > 1) {
+            taskManagerState.currentPage--;
+            renderTasks();
+        }
+    });
+    nextButton?.addEventListener('click', () => {
+        const totalPages = getTaskTotalPages();
+
+        if (taskManagerState.currentPage < totalPages) {
+            taskManagerState.currentPage++;
+            renderTasks();
+        }
+    });
+    tbody?.addEventListener('click', (event) => {
+        const button = event.target?.closest?.('[data-task-action]');
+
+        if (!button) return;
+
+        const id = Number.parseInt(button.dataset.taskId || '0', 10);
+
+        if (!id) return;
+
+        if (button.dataset.taskAction === 'edit') {
+            editTask(id);
+        }
+
+        if (button.dataset.taskAction === 'delete') {
+            deleteTask(id);
+        }
+    });
+    form?.addEventListener('submit', handleTaskFormSubmit);
+    cancelButton?.addEventListener('click', closeTaskDialog);
+    closeButton?.addEventListener('click', closeTaskDialog);
+    dialog?.addEventListener('click', (event) => {
+        if (event.target === dialog) {
+            closeTaskDialog();
+        }
+    });
+    previewFields.forEach((field) => {
+        field?.addEventListener('input', updateTaskPreview);
+        field?.addEventListener('change', updateTaskPreview);
+    });
+    document.getElementById('taskRecurring')?.addEventListener('change', toggleTaskRecurrenceFields);
+}
+
+function setTaskTableLoading(message = 'Loading tasks...') {
+    const tbody = document.getElementById('tasksTableBody');
+
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="7" class="product-empty-state">
+                ${adminEscapeHtml(message)}
+            </td>
+        </tr>
+    `;
+}
+
+function showTaskAlert(message, type = 'success') {
+    const alert = document.getElementById('taskAlert');
+
+    if (!alert) return;
+
+    alert.textContent = message;
+    alert.dataset.type = type;
+    alert.hidden = false;
+
+    window.setTimeout(() => {
+        if (alert.textContent === message) {
+            alert.hidden = true;
+        }
+    }, 5000);
+}
+
+function getTaskUserLabel(user) {
+    const fullName = String(user?.full_name ?? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()).trim();
+    const email = String(user?.email_address ?? '').trim();
+
+    return fullName || email || `User #${user?.id || ''}`.trim();
+}
+
+function populateTaskUserControls() {
+    const filter = document.getElementById('taskUserFilter');
+    const formSelect = document.getElementById('taskUserId');
+    const userOptions = taskManagerState.users.map((user) => {
+        const inactiveSuffix = Number(user.is_active) === 1 ? '' : ' (inactive)';
+
+        return `
+            <option value="${adminEscapeHtml(user.id)}">
+                ${adminEscapeHtml(getTaskUserLabel(user) + inactiveSuffix)}
+            </option>
+        `;
+    }).join('');
+
+    if (filter) {
+        const selectedValue = filter.value || 'all';
+        filter.innerHTML = `
+            <option value="all">All Users</option>
+            ${userOptions}
+        `;
+        filter.value = selectedValue;
+
+        if (filter.value !== selectedValue) {
+            filter.value = 'all';
+        }
+    }
+
+    if (formSelect) {
+        formSelect.innerHTML = `
+            <option value="">Select user</option>
+            ${userOptions}
+        `;
+    }
+}
+
+function formatTaskLabel(value) {
+    return String(value ?? '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function isRecurringTask(task) {
+    return String(task?.recurrence_frequency || 'none') !== 'none'
+        && Number(task?.recurrence_count || 1) > 1;
+}
+
+function formatTaskRecurrence(taskOrFrequency, intervalValue = 1, countValue = 1, sequenceValue = null) {
+    const source = typeof taskOrFrequency === 'object' && taskOrFrequency !== null
+        ? taskOrFrequency
+        : {
+            recurrence_frequency: taskOrFrequency,
+            recurrence_interval: intervalValue,
+            recurrence_count: countValue,
+            recurrence_sequence: sequenceValue
+        };
+    const frequency = String(source.recurrence_frequency || 'none');
+    const interval = Math.max(1, Number.parseInt(source.recurrence_interval || '1', 10));
+    const count = Math.max(1, Number.parseInt(source.recurrence_count || '1', 10));
+    const sequence = Number.parseInt(source.recurrence_sequence || '0', 10);
+
+    if (frequency === 'none' || count <= 1) {
+        return 'One-time task';
+    }
+
+    const unit = {
+        daily: 'day',
+        weekly: 'week',
+        monthly: 'month',
+        yearly: 'year'
+    }[frequency] || 'interval';
+    const intervalLabel = interval === 1 ? unit : `${interval} ${unit}s`;
+    const sequenceLabel = sequence > 0 ? ` | ${sequence} of ${count}` : '';
+
+    return `Repeats every ${intervalLabel}${sequenceLabel}`;
+}
+
+function getTaskSearchValue() {
+    return String(document.getElementById('taskSearchInput')?.value ?? '')
+        .trim()
+        .toLowerCase();
+}
+
+function applyTaskFilters() {
+    const userFilter = document.getElementById('taskUserFilter')?.value || 'all';
+    const statusFilter = document.getElementById('taskStatusFilter')?.value || 'all';
+    const priorityFilter = document.getElementById('taskPriorityFilter')?.value || 'all';
+    const searchValue = getTaskSearchValue();
+
+    taskManagerState.filteredTasks = taskManagerState.tasks.filter((task) => {
+        const matchesUser = userFilter === 'all' || String(task.user_id ?? '') === String(userFilter);
+        const matchesStatus = statusFilter === 'all' || String(task.task_status ?? '') === String(statusFilter);
+        const matchesPriority = priorityFilter === 'all' || String(task.priority ?? '') === String(priorityFilter);
+        const searchable = [
+            task.title,
+            task.description,
+            task.task_status,
+            task.priority,
+            task.recurrence_frequency,
+            task.assigned_to,
+            task.assigned_email
+        ].join(' ').toLowerCase();
+        const matchesSearch = !searchValue || searchable.includes(searchValue);
+
+        return matchesUser && matchesStatus && matchesPriority && matchesSearch;
+    });
+
+    const totalPages = getTaskTotalPages();
+
+    if (taskManagerState.currentPage > totalPages) {
+        taskManagerState.currentPage = totalPages;
+    }
+
+    updateTaskMetrics();
+    renderTasks();
+}
+
+function getTaskDate(value) {
+    const raw = String(value ?? '').trim();
+
+    if (!raw) return null;
+
+    const date = new Date(raw.replace(' ', 'T'));
+
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isTaskClosed(task) {
+    return ['completed', 'canceled'].includes(String(task?.task_status ?? ''));
+}
+
+function isTaskOverdue(task) {
+    const dueDate = getTaskDate(task?.due_at);
+
+    return Boolean(dueDate) && !isTaskClosed(task) && dueDate.getTime() < Date.now();
+}
+
+function updateTaskMetrics() {
+    const total = taskManagerState.tasks.length;
+    const open = taskManagerState.tasks.filter((task) => !isTaskClosed(task)).length;
+    const overdue = taskManagerState.tasks.filter(isTaskOverdue).length;
+    const filtered = taskManagerState.filteredTasks.length;
+
+    const totalElement = document.getElementById('taskTotalCount');
+    const openElement = document.getElementById('taskOpenCount');
+    const overdueElement = document.getElementById('taskOverdueCount');
+    const filteredElement = document.getElementById('taskFilteredCount');
+
+    if (totalElement) totalElement.textContent = String(total);
+    if (openElement) openElement.textContent = String(open);
+    if (overdueElement) overdueElement.textContent = String(overdue);
+    if (filteredElement) filteredElement.textContent = String(filtered);
+}
+
+function getTaskTotalPages() {
+    return Math.max(1, Math.ceil(taskManagerState.filteredTasks.length / taskManagerState.perPage));
+}
+
+function getTaskStatusBadge(status) {
+    const normalized = String(status || 'open');
+    const className = {
+        open: 'role-badge',
+        in_progress: 'warning',
+        completed: 'active',
+        canceled: 'muted'
+    }[normalized] || 'muted';
+
+    return `<span class="status-badge ${className}">${adminEscapeHtml(formatTaskLabel(normalized))}</span>`;
+}
+
+function getTaskPriorityBadge(priority) {
+    const normalized = String(priority || 'normal');
+    const className = {
+        low: 'muted',
+        normal: 'role-badge',
+        high: 'warning',
+        urgent: 'danger'
+    }[normalized] || 'muted';
+
+    return `<span class="status-badge ${className}">${adminEscapeHtml(formatTaskLabel(normalized))}</span>`;
+}
+
+function renderTasks() {
+    const tbody = document.getElementById('tasksTableBody');
+
+    if (!tbody) return;
+
+    const start = (taskManagerState.currentPage - 1) * taskManagerState.perPage;
+    const end = start + taskManagerState.perPage;
+    const pageTasks = taskManagerState.filteredTasks.slice(start, end);
+
+    if (pageTasks.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="product-empty-state">
+                    No tasks found.
+                </td>
+            </tr>
+        `;
+        updateTaskPagination();
+        return;
+    }
+
+    tbody.innerHTML = pageTasks.map((task) => {
+        const description = String(task.description || '').trim();
+        const detailLines = [];
+        const dueClass = isTaskOverdue(task) ? 'task-due-cell overdue' : 'task-due-cell';
+        const completed = task.completed_at ? `Completed ${formatDateTime(task.completed_at)}` : '';
+        const calendarUrl = String(task.google_calendar_url || '#');
+
+        if (description) {
+            detailLines.push(description);
+        }
+
+        if (isRecurringTask(task)) {
+            detailLines.push(formatTaskRecurrence(task));
+        }
+
+        return `
+            <tr>
+                <td>
+                    <div class="task-title-cell">
+                        <strong>${adminEscapeHtml(task.title || 'Untitled task')}</strong>
+                        ${detailLines.length > 0 ? `<small>${adminEscapeHtml(detailLines.join(' | '))}</small>` : '<small>No description</small>'}
+                    </div>
+                </td>
+                <td>
+                    <div class="task-user-cell">
+                        <strong>${adminEscapeHtml(task.assigned_to || 'Unassigned')}</strong>
+                        <small>${adminEscapeHtml(task.assigned_email || '')}</small>
+                    </div>
+                </td>
+                <td>${getTaskPriorityBadge(task.priority)}</td>
+                <td>${getTaskStatusBadge(task.task_status)}</td>
+                <td>
+                    <div class="${dueClass}">
+                        <strong>${formatDateTime(task.due_at)}</strong>
+                        <small>${adminEscapeHtml(completed || (isTaskOverdue(task) ? 'Overdue' : ''))}</small>
+                    </div>
+                </td>
+                <td>${formatDateTime(task.updated_at || task.created_at)}</td>
+                <td>
+                    <div class="product-actions">
+                        <button type="button"
+                            class="table-action"
+                            data-task-action="edit"
+                            data-task-id="${adminEscapeHtml(task.id)}">
+                            Edit
+                        </button>
+                        <a class="table-action task-calendar-link"
+                            href="${adminEscapeHtml(calendarUrl)}"
+                            target="_blank"
+                            rel="noopener noreferrer">
+                            Calendar
+                        </a>
+                        <button type="button"
+                            class="table-action danger"
+                            data-task-action="delete"
+                            data-task-id="${adminEscapeHtml(task.id)}">
+                            Delete
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    updateTaskPagination();
+}
+
+function updateTaskPagination() {
+    const totalPages = getTaskTotalPages();
+    const pageInfo = document.getElementById('taskPageInfo');
+    const prevButton = document.getElementById('taskPrevPageBtn');
+    const nextButton = document.getElementById('taskNextPageBtn');
+
+    if (pageInfo) {
+        pageInfo.textContent = `Page ${taskManagerState.currentPage} of ${totalPages}`;
+    }
+
+    if (prevButton) {
+        prevButton.disabled = taskManagerState.currentPage <= 1;
+    }
+
+    if (nextButton) {
+        nextButton.disabled = taskManagerState.currentPage >= totalPages;
+    }
+}
+
+function setTaskFormValue(id, value) {
+    const field = document.getElementById(id);
+
+    if (field) {
+        field.value = value ?? '';
+    }
+}
+
+function toggleTaskRecurrenceFields() {
+    const checkbox = document.getElementById('taskRecurring');
+    const fields = document.getElementById('taskRecurrenceFields');
+    const dueAt = document.getElementById('taskDueAt');
+
+    if (!checkbox || !fields) return;
+
+    const enabled = checkbox.checked;
+
+    fields.hidden = !enabled;
+    if (dueAt) dueAt.required = enabled;
+    fields.querySelectorAll('input, select').forEach((field) => {
+        field.disabled = !enabled;
+    });
+
+    updateTaskPreview();
+}
+
+function openTaskForm(task = null) {
+    const form = document.getElementById('taskForm');
+    const dialog = document.getElementById('taskFormDialog');
+    const title = document.getElementById('taskFormTitle');
+    const taskManager = document.querySelector('.task-manager');
+    const currentUserId = taskManager?.dataset.currentUserId || '';
+    const defaultUserId = taskManagerState.users.some((user) => String(user.id) === String(currentUserId))
+        ? currentUserId
+        : taskManagerState.users[0]?.id || '';
+
+    if (!form || !dialog) return;
+
+    form.reset();
+
+    const isEditing = Boolean(task);
+
+    if (title) {
+        title.textContent = isEditing ? 'Edit Task' : 'Add Task';
+    }
+
+    setTaskFormValue('taskId', task?.id || '');
+    setTaskFormValue('taskTitle', task?.title || '');
+    setTaskFormValue('taskUserId', task?.user_id || defaultUserId);
+    setTaskFormValue('taskDueAt', formatDateTimeForInput(task?.due_at));
+    setTaskFormValue('taskStatus', task?.task_status || 'open');
+    setTaskFormValue('taskPriority', task?.priority || 'normal');
+    setTaskFormValue('taskDescription', task?.description || '');
+
+    const recurring = document.getElementById('taskRecurring');
+    const isEditingRecurringTask = isRecurringTask(task);
+
+    setTaskFormValue('taskRecurrenceFrequency', isEditingRecurringTask ? task?.recurrence_frequency : 'weekly');
+    setTaskFormValue('taskRecurrenceInterval', isEditingRecurringTask ? task?.recurrence_interval : '1');
+    setTaskFormValue('taskRecurrenceCount', isEditingRecurringTask ? task?.recurrence_count : '2');
+
+    if (recurring) {
+        recurring.checked = isEditingRecurringTask;
+        recurring.disabled = isEditing;
+    }
+
+    toggleTaskRecurrenceFields();
+    updateTaskPreview();
+
+    if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+    } else {
+        dialog.setAttribute('open', '');
+    }
+
+    document.getElementById('taskTitle')?.focus();
+}
+
+function closeTaskDialog() {
+    const dialog = document.getElementById('taskFormDialog');
+
+    if (!dialog) return;
+
+    if (typeof dialog.close === 'function') {
+        dialog.close();
+    } else {
+        dialog.removeAttribute('open');
+    }
+}
+
+function updateTaskPreview() {
+    const title = document.getElementById('taskTitle')?.value || '';
+    const userSelect = document.getElementById('taskUserId');
+    const dueAt = document.getElementById('taskDueAt')?.value || '';
+    const status = document.getElementById('taskStatus')?.value || 'open';
+    const recurringCheckbox = document.getElementById('taskRecurring');
+    const recurrenceFrequency = document.getElementById('taskRecurrenceFrequency')?.value || 'weekly';
+    const recurrenceInterval = document.getElementById('taskRecurrenceInterval')?.value || '1';
+    const recurrenceCount = document.getElementById('taskRecurrenceCount')?.value || '2';
+    const recurring = Boolean(recurringCheckbox?.checked)
+        && recurrenceFrequency !== 'none'
+        && Number.parseInt(recurrenceCount || '1', 10) > 1;
+    const previewStatus = document.getElementById('taskPreviewStatus');
+    const previewTitle = document.getElementById('taskPreviewTitle');
+    const previewUser = document.getElementById('taskPreviewUser');
+    const previewDue = document.getElementById('taskPreviewDue');
+    const previewRecurrence = document.getElementById('taskPreviewRecurrence');
+
+    if (previewStatus) {
+        previewStatus.textContent = formatTaskLabel(status);
+    }
+
+    if (previewTitle) {
+        previewTitle.textContent = title || 'New Task';
+    }
+
+    if (previewUser) {
+        previewUser.textContent = userSelect?.selectedOptions?.[0]?.textContent?.trim() || 'No user selected';
+    }
+
+    if (previewDue) {
+        previewDue.textContent = dueAt ? formatDateTime(dueAt) : 'No due date';
+    }
+
+    if (previewRecurrence) {
+        previewRecurrence.textContent = recurring
+            ? formatTaskRecurrence(recurrenceFrequency, recurrenceInterval, recurrenceCount)
+            : 'One-time task';
+    }
+}
+
+function editTask(id) {
+    const task = taskManagerState.tasks.find((item) => Number(item.id) === Number(id));
+
+    if (!task) {
+        showTaskAlert('Task could not be found.', 'error');
+        return;
+    }
+
+    openTaskForm(task);
+}
+
+async function deleteTask(id) {
+    const task = taskManagerState.tasks.find((item) => Number(item.id) === Number(id));
+    const taskTitle = task?.title || 'this task';
+
+    if (!confirm(`Delete ${taskTitle}?`)) {
+        return;
+    }
+
+    try {
+        await fetchAdminJson('/admin/api/deleteTask.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id })
+        });
+
+        showTaskAlert('Task deleted.');
+        await refreshTasks();
+    } catch (error) {
+        console.error('Error deleting task:', error);
+        showTaskAlert(error.message || 'Unable to delete task.', 'error');
+    }
+}
+
+async function handleTaskFormSubmit(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const saveButton = document.getElementById('saveTaskBtn');
+
+    if (!form) return;
+
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+    }
+
+    try {
+        const data = await fetchAdminJson('/admin/api/saveTask.php', {
+            method: 'POST',
+            body: new FormData(form)
+        });
+
+        closeTaskDialog();
+        showTaskAlert(data.message || 'Task saved.');
+        await refreshTasks();
+    } catch (error) {
+        console.error('Error saving task:', error);
+        showTaskAlert(error.message || 'Unable to save task.', 'error');
+    } finally {
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Task';
+        }
+    }
+}
+
+async function refreshTasks() {
+    const tasks = await fetchAdminJson('/admin/api/getTasks.php');
+
+    taskManagerState.tasks = Array.isArray(tasks) ? tasks : [];
+    applyTaskFilters();
+}
+
+// =====================================
+// Transaction Manager
+// =====================================
+
+async function loadTransactions() {
+    const tbody = document.getElementById('transactionsTableBody');
+
+    if (!tbody) return;
+
+    bindTransactionManagerEvents();
+    setTransactionTableLoading();
+
+    try {
+        const transactions = await fetchAdminJson('/admin/api/getTransactions.php');
+
+        transactionManagerState.transactions = Array.isArray(transactions) ? transactions : [];
+        transactionManagerState.statuses = getTransactionOptions(transactionManagerState.transactions, 'transaction_status', [
+            'paid',
+            'completed',
+            'pending',
+            'failed',
+            'refunded'
+        ]);
+        transactionManagerState.types = getTransactionOptions(transactionManagerState.transactions, 'transaction_type', [
+            'sale',
+            'refund',
+            'return',
+            'chargeback'
+        ]);
+        transactionManagerState.currentPage = 1;
+
+        populateTransactionFilters();
+        applyTransactionFilters();
+    } catch (error) {
+        console.error('Error loading transactions:', error);
+        setTransactionTableLoading('Unable to load transactions.');
+        showTransactionAlert(error.message || 'Unable to load transactions.', 'error');
+    }
+}
+
+function bindTransactionManagerEvents() {
+    const refreshButton = document.getElementById('refreshTransactionsBtn');
+    const searchInput = document.getElementById('transactionSearchInput');
+    const statusFilter = document.getElementById('transactionStatusFilter');
+    const typeFilter = document.getElementById('transactionTypeFilter');
+    const resetButton = document.getElementById('resetTransactionFiltersBtn');
+    const prevButton = document.getElementById('transactionPrevPageBtn');
+    const nextButton = document.getElementById('transactionNextPageBtn');
+    const tbody = document.getElementById('transactionsTableBody');
+    const form = document.getElementById('transactionForm');
+    const cancelButton = document.getElementById('cancelTransactionBtn');
+    const closeButton = document.getElementById('closeTransactionDialogBtn');
+    const dialog = document.getElementById('transactionFormDialog');
+    const amountInputs = [
+        document.getElementById('transactionAmount'),
+        document.getElementById('transactionProductSalesAmount'),
+        document.getElementById('transactionProductCostAmount'),
+        document.getElementById('transactionShippingAmount'),
+        document.getElementById('transactionReturnAmount'),
+        document.getElementById('transactionSalesTaxAmount'),
+        document.getElementById('transactionDiscountAmount'),
+        document.getElementById('transactionPaymentFeeAmount'),
+        document.getElementById('transactionCurrencyCode')
+    ];
+
+    refreshButton?.addEventListener('click', async () => {
+        try {
+            await refreshTransactions();
+            showTransactionAlert('Transactions refreshed.');
+        } catch (error) {
+            console.error('Error refreshing transactions:', error);
+            showTransactionAlert(error.message || 'Unable to refresh transactions.', 'error');
+        }
+    });
+    searchInput?.addEventListener('input', () => {
+        transactionManagerState.currentPage = 1;
+        applyTransactionFilters();
+    });
+    statusFilter?.addEventListener('change', () => {
+        transactionManagerState.currentPage = 1;
+        applyTransactionFilters();
+    });
+    typeFilter?.addEventListener('change', () => {
+        transactionManagerState.currentPage = 1;
+        applyTransactionFilters();
+    });
+    resetButton?.addEventListener('click', () => {
+        if (searchInput) searchInput.value = '';
+        if (statusFilter) statusFilter.value = 'all';
+        if (typeFilter) typeFilter.value = 'all';
+        transactionManagerState.currentPage = 1;
+        applyTransactionFilters();
+    });
+    prevButton?.addEventListener('click', () => {
+        if (transactionManagerState.currentPage > 1) {
+            transactionManagerState.currentPage--;
+            renderTransactions();
+        }
+    });
+    nextButton?.addEventListener('click', () => {
+        const totalPages = getTransactionTotalPages();
+
+        if (transactionManagerState.currentPage < totalPages) {
+            transactionManagerState.currentPage++;
+            renderTransactions();
+        }
+    });
+    tbody?.addEventListener('click', (event) => {
+        const button = event.target?.closest?.('[data-transaction-action]');
+
+        if (!button) return;
+
+        const id = Number.parseInt(button.dataset.transactionId || '0', 10);
+
+        if (!id) return;
+
+        if (button.dataset.transactionAction === 'edit') {
+            editTransaction(id);
+        }
+    });
+    form?.addEventListener('submit', handleTransactionFormSubmit);
+    cancelButton?.addEventListener('click', closeTransactionDialog);
+    closeButton?.addEventListener('click', closeTransactionDialog);
+    dialog?.addEventListener('click', (event) => {
+        if (event.target === dialog) {
+            closeTransactionDialog();
+        }
+    });
+    amountInputs.forEach((input) => {
+        input?.addEventListener('input', updateTransactionPreviewAmounts);
+    });
+}
+
+function setTransactionTableLoading(message = 'Loading transactions...') {
+    const tbody = document.getElementById('transactionsTableBody');
+
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="9" class="product-empty-state">
+                ${adminEscapeHtml(message)}
+            </td>
+        </tr>
+    `;
+}
+
+function showTransactionAlert(message, type = 'success') {
+    const alert = document.getElementById('transactionAlert');
+
+    if (!alert) return;
+
+    alert.textContent = message;
+    alert.dataset.type = type;
+    alert.hidden = false;
+
+    window.setTimeout(() => {
+        if (alert.textContent === message) {
+            alert.hidden = true;
+        }
+    }, 5000);
+}
+
+function getTransactionOptions(transactions, field, defaults = []) {
+    const options = new Map();
+
+    defaults.forEach((value) => {
+        options.set(value.toLowerCase(), value);
+    });
+
+    transactions.forEach((transaction) => {
+        const value = String(transaction?.[field] ?? '').trim();
+
+        if (!value) return;
+
+        options.set(value.toLowerCase(), value);
+    });
+
+    return Array.from(options.values())
+        .sort((a, b) => formatTransactionLabel(a).localeCompare(formatTransactionLabel(b)));
+}
+
+function populateTransactionFilters() {
+    const statusFilter = document.getElementById('transactionStatusFilter');
+    const typeFilter = document.getElementById('transactionTypeFilter');
+
+    if (statusFilter) {
+        const selectedValue = statusFilter.value || 'all';
+        statusFilter.innerHTML = `
+            <option value="all">All Statuses</option>
+            ${transactionManagerState.statuses.map((status) => `
+                <option value="${adminEscapeHtml(status)}">${adminEscapeHtml(formatTransactionLabel(status))}</option>
+            `).join('')}
+        `;
+        statusFilter.value = selectedValue;
+
+        if (statusFilter.value !== selectedValue) {
+            statusFilter.value = 'all';
+        }
+    }
+
+    if (typeFilter) {
+        const selectedValue = typeFilter.value || 'all';
+        typeFilter.innerHTML = `
+            <option value="all">All Types</option>
+            ${transactionManagerState.types.map((type) => `
+                <option value="${adminEscapeHtml(type)}">${adminEscapeHtml(formatTransactionLabel(type))}</option>
+            `).join('')}
+        `;
+        typeFilter.value = selectedValue;
+
+        if (typeFilter.value !== selectedValue) {
+            typeFilter.value = 'all';
+        }
+    }
+}
+
+function formatTransactionLabel(value) {
+    return String(value ?? '')
+        .trim()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'N/A';
+}
+
+function getTransactionSearchValue() {
+    return String(document.getElementById('transactionSearchInput')?.value ?? '')
+        .trim()
+        .toLowerCase();
+}
+
+function applyTransactionFilters() {
+    const statusFilter = document.getElementById('transactionStatusFilter')?.value || 'all';
+    const typeFilter = document.getElementById('transactionTypeFilter')?.value || 'all';
+    const searchValue = getTransactionSearchValue();
+
+    transactionManagerState.filteredTransactions = transactionManagerState.transactions.filter((transaction) => {
+        const matchesStatus = statusFilter === 'all'
+            || String(transaction.transaction_status ?? '').toLowerCase() === String(statusFilter).toLowerCase();
+        const matchesType = typeFilter === 'all'
+            || String(transaction.transaction_type ?? '').toLowerCase() === String(typeFilter).toLowerCase();
+        const searchable = [
+            transaction.id,
+            transaction.order_id,
+            transaction.order_number,
+            transaction.customer_name,
+            transaction.customer_email,
+            transaction.transaction_reference,
+            transaction.payment_provider,
+            transaction.transaction_type,
+            transaction.transaction_status,
+            transaction.currency_code
+        ].join(' ').toLowerCase();
+        const matchesSearch = !searchValue || searchable.includes(searchValue);
+
+        return matchesStatus && matchesType && matchesSearch;
+    });
+
+    const totalPages = getTransactionTotalPages();
+
+    if (transactionManagerState.currentPage > totalPages) {
+        transactionManagerState.currentPage = totalPages;
+    }
+
+    updateTransactionMetrics();
+    renderTransactions();
+}
+
+function updateTransactionMetrics() {
+    const total = transactionManagerState.transactions.length;
+    const posted = transactionManagerState.transactions.filter((transaction) => Number(transaction.is_posted) === 1).length;
+    const filtered = transactionManagerState.filteredTransactions.length;
+    const grossAmount = transactionManagerState.transactions.reduce((sum, transaction) => {
+        const amount = Number.parseFloat(transaction.transaction_amount ?? 0);
+
+        return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+
+    const totalElement = document.getElementById('transactionTotalCount');
+    const postedElement = document.getElementById('transactionPostedCount');
+    const amountElement = document.getElementById('transactionGrossAmount');
+    const filteredElement = document.getElementById('transactionFilteredCount');
+
+    if (totalElement) totalElement.textContent = String(total);
+    if (postedElement) postedElement.textContent = String(posted);
+    if (amountElement) amountElement.textContent = formatTransactionMoney(grossAmount, getPrimaryTransactionCurrency());
+    if (filteredElement) filteredElement.textContent = String(filtered);
+}
+
+function getPrimaryTransactionCurrency() {
+    const transaction = transactionManagerState.transactions.find((item) => String(item.currency_code || '').trim());
+
+    return transaction?.currency_code || 'USD';
+}
+
+function getTransactionTotalPages() {
+    return Math.max(1, Math.ceil(transactionManagerState.filteredTransactions.length / transactionManagerState.perPage));
+}
+
+function renderTransactions() {
+    const tbody = document.getElementById('transactionsTableBody');
+
+    if (!tbody) return;
+
+    const start = (transactionManagerState.currentPage - 1) * transactionManagerState.perPage;
+    const end = start + transactionManagerState.perPage;
+    const pageTransactions = transactionManagerState.filteredTransactions.slice(start, end);
+
+    if (pageTransactions.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="product-empty-state">
+                    No transactions found.
+                </td>
+            </tr>
+        `;
+        updateTransactionPagination();
+        return;
+    }
+
+    tbody.innerHTML = pageTransactions.map((transaction) => {
+        const reference = String(transaction.transaction_reference || '').trim();
+        const provider = String(transaction.payment_provider || '').trim();
+        const orderLabel = transaction.order_number || `Order #${transaction.order_id || 'N/A'}`;
+        const customerName = String(transaction.customer_name || '').trim();
+        const customerEmail = String(transaction.customer_email || '').trim();
+        const fallbackCustomer = transaction.user_id ? `User #${transaction.user_id}` : 'N/A';
+        const displayCustomer = customerName || customerEmail || fallbackCustomer;
+        const customerDetail = customerName && customerEmail ? customerEmail : '';
+        const visibleBadge = Number(transaction.visible) === 1
+            ? '<span class="status-badge active">Visible</span>'
+            : '<span class="status-badge muted">Hidden</span>';
+        const statusBadge = renderTransactionStatusBadge(transaction);
+
+        return `
+            <tr>
+                <td>
+                    <div class="transaction-reference-cell">
+                        <strong>${adminEscapeHtml(reference || `Transaction #${transaction.id}`)}</strong>
+                        <small>${adminEscapeHtml(provider || 'No provider')} | ID ${adminEscapeHtml(transaction.id)}</small>
+                    </div>
+                </td>
+                <td>
+                    <div class="transaction-order-cell">
+                        <strong>${adminEscapeHtml(orderLabel)}</strong>
+                        <small>${adminEscapeHtml(formatTransactionLabel(transaction.order_status || 'No status'))}</small>
+                    </div>
+                </td>
+                <td>
+                    <div class="transaction-customer-cell">
+                        <strong>${adminEscapeHtml(displayCustomer)}</strong>
+                        ${customerDetail ? `<small>${adminEscapeHtml(customerDetail)}</small>` : ''}
+                    </div>
+                </td>
+                <td>
+                    <span class="status-badge role-badge">
+                        ${adminEscapeHtml(formatTransactionLabel(transaction.transaction_type || 'Sale'))}
+                    </span>
+                </td>
+                <td>
+                    <div class="status-stack">
+                        ${statusBadge}
+                        ${visibleBadge}
+                    </div>
+                </td>
+                <td class="money-cell">${formatTransactionMoney(transaction.transaction_amount, transaction.currency_code)}</td>
+                <td class="money-cell">${formatTransactionMoney(transaction.net_sales_amount, transaction.currency_code)}</td>
+                <td>${formatDateTime(transaction.processed_at || transaction.created_at)}</td>
+                <td>
+                    <div class="product-actions">
+                        <button type="button"
+                            class="table-action"
+                            data-transaction-action="edit"
+                            data-transaction-id="${adminEscapeHtml(transaction.id)}">
+                            Edit
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    updateTransactionPagination();
+}
+
+function renderTransactionStatusBadge(transaction) {
+    const status = String(transaction.transaction_status || '').trim() || 'No status';
+    const normalized = status.toLowerCase();
+    let className = Number(transaction.is_posted) === 1 ? 'active' : 'muted';
+
+    if (['pending', 'authorized', 'processing'].includes(normalized)) {
+        className = 'warning';
+    }
+
+    if (['failed', 'declined', 'void', 'voided', 'canceled', 'cancelled', 'expired'].includes(normalized)) {
+        className = 'danger';
+    }
+
+    return `<span class="status-badge ${className}">${adminEscapeHtml(formatTransactionLabel(status))}</span>`;
+}
+
+function updateTransactionPagination() {
+    const totalPages = getTransactionTotalPages();
+    const pageInfo = document.getElementById('transactionPageInfo');
+    const prevButton = document.getElementById('transactionPrevPageBtn');
+    const nextButton = document.getElementById('transactionNextPageBtn');
+
+    if (pageInfo) {
+        pageInfo.textContent = `Page ${transactionManagerState.currentPage} of ${totalPages}`;
+    }
+
+    if (prevButton) {
+        prevButton.disabled = transactionManagerState.currentPage <= 1;
+    }
+
+    if (nextButton) {
+        nextButton.disabled = transactionManagerState.currentPage >= totalPages;
+    }
+}
+
+function setTransactionFormValue(id, value) {
+    const field = document.getElementById(id);
+
+    if (field) {
+        field.value = value ?? '';
+    }
+}
+
+function openTransactionForm(transaction) {
+    const form = document.getElementById('transactionForm');
+    const dialog = document.getElementById('transactionFormDialog');
+
+    if (!form || !dialog || !transaction) return;
+
+    form.reset();
+
+    setTransactionFormValue('transactionId', transaction.id || '');
+    setTransactionFormValue('transactionOrderId', transaction.order_id || '');
+    setTransactionFormValue('transactionReference', transaction.transaction_reference || '');
+    setTransactionFormValue('transactionProvider', transaction.payment_provider || '');
+    setTransactionFormValue('transactionType', transaction.transaction_type || 'sale');
+    setTransactionFormValue('transactionStatus', transaction.transaction_status || '');
+    setTransactionFormValue('transactionCurrencyCode', transaction.currency_code || 'USD');
+    setTransactionFormValue('transactionProcessedAt', formatDateTimeForInput(transaction.processed_at));
+    setTransactionFormValue('transactionAmount', transaction.transaction_amount ?? '');
+    setTransactionFormValue('transactionProductSalesAmount', transaction.product_sales_amount ?? '0.00');
+    setTransactionFormValue('transactionProductCostAmount', transaction.product_cost_amount ?? '0.00');
+    setTransactionFormValue('transactionShippingAmount', transaction.shipping_amount ?? '0.00');
+    setTransactionFormValue('transactionReturnAmount', transaction.return_amount ?? '0.00');
+    setTransactionFormValue('transactionSalesTaxAmount', transaction.sales_tax_amount ?? '0.00');
+    setTransactionFormValue('transactionDiscountAmount', transaction.discount_amount ?? '0.00');
+    setTransactionFormValue('transactionPaymentFeeAmount', transaction.payment_fee_amount ?? '0.00');
+
+    const visible = document.getElementById('transactionVisible');
+
+    if (visible) {
+        visible.checked = Number(transaction.visible) === 1;
+    }
+
+    updateTransactionOrderPreview(transaction);
+    updateTransactionPreviewAmounts();
+
+    if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+    } else {
+        dialog.setAttribute('open', '');
+    }
+
+    document.getElementById('transactionReference')?.focus();
+}
+
+function closeTransactionDialog() {
+    const dialog = document.getElementById('transactionFormDialog');
+
+    if (!dialog) return;
+
+    if (typeof dialog.close === 'function') {
+        dialog.close();
+    } else {
+        dialog.removeAttribute('open');
+    }
+}
+
+function updateTransactionOrderPreview(transaction) {
+    const order = document.getElementById('transactionPreviewOrder');
+    const customer = document.getElementById('transactionPreviewCustomer');
+    const orderTotal = document.getElementById('transactionPreviewOrderTotal');
+    const orderLabel = transaction.order_number || `Order #${transaction.order_id || 'N/A'}`;
+    const customerName = String(transaction.customer_name || '').trim();
+    const customerEmail = String(transaction.customer_email || '').trim();
+
+    if (order) {
+        order.textContent = orderLabel;
+    }
+
+    if (customer) {
+        customer.textContent = customerName || customerEmail || 'N/A';
+    }
+
+    if (orderTotal) {
+        orderTotal.textContent = formatTransactionMoney(transaction.order_total_amount, transaction.currency_code);
+    }
+}
+
+function updateTransactionPreviewAmounts() {
+    const currencyCode = document.getElementById('transactionCurrencyCode')?.value || 'USD';
+    const productSales = getTransactionFormNumber('transactionProductSalesAmount');
+    const productCost = getTransactionFormNumber('transactionProductCostAmount');
+    const returnAmount = getTransactionFormNumber('transactionReturnAmount');
+    const discountAmount = getTransactionFormNumber('transactionDiscountAmount');
+    const netSales = Math.max(productSales - returnAmount - discountAmount, 0);
+    const grossProfit = Math.max(netSales - productCost, 0);
+    const netInput = document.getElementById('transactionNetPreviewInput');
+    const grossPreview = document.getElementById('transactionGrossPreview');
+
+    if (netInput) {
+        netInput.value = formatTransactionMoney(netSales, currencyCode);
+    }
+
+    if (grossPreview) {
+        grossPreview.textContent = formatTransactionMoney(grossProfit, currencyCode);
+    }
+}
+
+function getTransactionFormNumber(id) {
+    const value = Number.parseFloat(document.getElementById(id)?.value ?? 0);
+
+    return Number.isFinite(value) ? value : 0;
+}
+
+function editTransaction(id) {
+    const transaction = transactionManagerState.transactions.find((item) => Number(item.id) === Number(id));
+
+    if (!transaction) {
+        showTransactionAlert('Transaction could not be found.', 'error');
+        return;
+    }
+
+    openTransactionForm(transaction);
+}
+
+async function handleTransactionFormSubmit(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const saveButton = document.getElementById('saveTransactionBtn');
+
+    if (!form) return;
+
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+    }
+
+    try {
+        const data = await fetchAdminJson('/admin/api/saveTransaction.php', {
+            method: 'POST',
+            body: new FormData(form)
+        });
+
+        closeTransactionDialog();
+        showTransactionAlert(data.message || 'Transaction saved.');
+        await refreshTransactions();
+    } catch (error) {
+        console.error('Error saving transaction:', error);
+        showTransactionAlert(error.message || 'Unable to save transaction.', 'error');
+    } finally {
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Transaction';
+        }
+    }
+}
+
+async function refreshTransactions() {
+    setTransactionTableLoading();
+
+    const transactions = await fetchAdminJson('/admin/api/getTransactions.php');
+
+    transactionManagerState.transactions = Array.isArray(transactions) ? transactions : [];
+    transactionManagerState.statuses = getTransactionOptions(transactionManagerState.transactions, 'transaction_status', transactionManagerState.statuses);
+    transactionManagerState.types = getTransactionOptions(transactionManagerState.transactions, 'transaction_type', transactionManagerState.types);
+
+    populateTransactionFilters();
+    applyTransactionFilters();
+}
+
+function formatTransactionMoney(value, currencyCode = 'USD') {
+    const number = Number.parseFloat(value);
+    const currency = String(currencyCode || 'USD').trim().toUpperCase();
+
+    if (!Number.isFinite(number)) {
+        return currency === 'USD' ? '$0.00' : `${currency} 0.00`;
+    }
+
+    if (/^[A-Z]{3}$/.test(currency)) {
+        try {
+            return number.toLocaleString('en-US', {
+                style: 'currency',
+                currency
+            });
+        } catch (error) {
+            return `${currency} ${number.toFixed(2)}`;
+        }
+    }
+
+    return `$${number.toFixed(2)}`;
+}
+
+function formatDateTime(dateString) {
+    if (!dateString) {
+        return 'N/A';
+    }
+
+    const date = new Date(dateString);
+
+    if (Number.isNaN(date.getTime())) {
+        return 'N/A';
+    }
+
+    return date.toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+    });
+}
+// =========================================
+// NEWS AGGREGATOR ADMINISTRATION
+// =========================================
+let newsAdminState = { csrf: '', sources: [], categories: [], entities: [], newsletters: [], articles: [] };
+
+async function newsAdminRequest(action, options = {}) {
+    const method = options.method || 'GET';
+    const [actionName, ...queryParts] = action.split('&');
+    const querySuffix = queryParts.length ? `&${queryParts.join('&')}` : '';
+    const response = await fetch(`/admin/api/news/action.php?action=${encodeURIComponent(actionName)}${querySuffix}`, {
+        method,
+        headers: method === 'GET' ? {} : { 'Content-Type': 'application/json', 'X-CSRF-Token': newsAdminState.csrf },
+        body: method === 'GET' ? undefined : JSON.stringify(options.data || {})
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.message || 'News request failed.');
+    return payload;
+}
+
+function newsAdminAlert(message, isError = false) {
+    const alert = document.getElementById('newsAdminAlert'); if (!alert) return;
+    alert.textContent = message; alert.hidden = false; alert.classList.toggle('is-error', isError);
+}
+
+function newsEscapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+
+function newsFormData(form) {
+    const result = Object.fromEntries(new FormData(form).entries());
+    if (typeof result.article_ids === 'string') result.article_ids = result.article_ids.split(',').map(value => value.trim()).filter(Boolean);
+    form.querySelectorAll('select[multiple]').forEach(select => result[select.name] = Array.from(select.selectedOptions, option => option.value));
+    form.querySelectorAll('input[type="checkbox"]').forEach(input => result[input.name] = input.checked ? '1' : '');
+    return result;
+}
+
+async function initNewsAdmin() {
+    const app = document.getElementById('newsAdminApp'); if (!app || app.dataset.ready) return; app.dataset.ready = '1';
+    try {
+        const data = await newsAdminRequest('bootstrap'); newsAdminState.csrf = data.csrf_token; newsAdminState.sources = data.sources; newsAdminState.categories = data.categories; newsAdminState.entities = data.entities; newsAdminState.newsletters = data.newsletters || [];
+        newsFillSelects(); newsRenderSources(); newsRenderCategories(); await newsLoadDashboard(); await newsLoadArticles();
+    } catch (error) { newsAdminAlert(error.message, true); }
+    app.addEventListener('click', newsAdminClick);
+    document.getElementById('newsSourceForm')?.addEventListener('submit', event => newsSubmitForm(event, 'save_source'));
+    document.getElementById('newsManualForm')?.addEventListener('submit', event => newsSubmitForm(event, 'manual_article'));
+    document.getElementById('newsArticleForm')?.addEventListener('submit', event => newsSubmitForm(event, 'save_article'));
+    document.getElementById('newsCategoryForm')?.addEventListener('submit', event => newsSubmitForm(event, 'save_category'));
+    const categoryForm=document.getElementById('newsCategoryForm');if(categoryForm&&!categoryForm.elements.id){const hidden=document.createElement('input');hidden.type='hidden';hidden.name='id';categoryForm.prepend(hidden);}
+    const sourceForm=document.getElementById('newsSourceForm');if(sourceForm&&!sourceForm.elements.connector_config_json){const label=document.createElement('label');label.textContent='JSON connector configuration';const textarea=document.createElement('textarea');textarea.name='connector_config_json';textarea.placeholder='{"items_key":"articles","field_map":{"headline":"title"}}';label.append(textarea);sourceForm.querySelector('.product-form-actions')?.before(label);}
+    document.getElementById('newsNewsletterForm')?.addEventListener('submit', event => newsSubmitForm(event, 'create_newsletter'));
+    document.getElementById('newsEntityForm')?.addEventListener('submit', event => newsSubmitForm(event, 'save_entity'));
+    document.getElementById('newsRuleForm')?.addEventListener('submit', event => newsSubmitForm(event, 'save_rule'));
+    document.getElementById('newsClusterForm')?.addEventListener('submit', event => newsSubmitForm(event, 'create_cluster'));
+    document.getElementById('newsNewsletterArticlesForm')?.addEventListener('submit', event => newsSubmitForm(event, 'newsletter_add_articles'));
+    document.getElementById('newsBulkForm')?.addEventListener('submit', newsBulkSubmit);
+    document.getElementById('newsImageForm')?.addEventListener('submit', newsImageSubmit);
+    document.querySelector('#newsNewsletterArticlesForm select[name="newsletter_id"]')?.addEventListener('change', newsUpdateNewsletterPreview);
+    document.getElementById('newsArticleRefresh')?.addEventListener('click', newsLoadArticles);
+}
+
+function newsFillSelects() {
+    const categoryOptions = '<option value="">Uncategorized</option>' + newsAdminState.categories.map(c => `<option value="${c.id}">${newsEscapeHtml(c.category_name)}</option>`).join('');
+    document.querySelectorAll('#newsAdminApp select[name="category_id"],#newsAdminApp select[name="default_category_id"]').forEach(select => select.innerHTML = categoryOptions);
+    const sourceOptions = '<option value="">Manual / no source record</option>' + newsAdminState.sources.map(s => `<option value="${s.id}">${newsEscapeHtml(s.source_name)}</option>`).join('');
+    document.querySelectorAll('#newsAdminApp select[name="source_id"]').forEach(select => select.innerHTML = sourceOptions);
+    const entityOptions = newsAdminState.entities.map(e => `<option value="${e.id}">${newsEscapeHtml(e.entity_name)} (${newsEscapeHtml(e.entity_type)})</option>`).join('');
+    document.querySelectorAll('#newsAdminApp select[name="entity_ids"]').forEach(select => select.innerHTML = entityOptions);
+    const newsletterOptions = newsAdminState.newsletters.map(n => `<option value="${n.id}">${newsEscapeHtml(n.newsletter_name)} (${newsEscapeHtml(n.status)})</option>`).join('');
+    document.querySelectorAll('#newsAdminApp select[name="newsletter_id"]').forEach(select => select.innerHTML = newsletterOptions);
+    newsUpdateNewsletterPreview();
+}
+
+async function newsLoadDashboard() {
+    const data = await newsAdminRequest('dashboard'), m = data.metrics;
+    document.getElementById('newsAdminMetrics').innerHTML = [['Active sources',m.active_sources],['Imported today',m.imported_today],['Awaiting review',m.pending],['Published today',m.published_today],['Duplicates',m.duplicates],['Failed imports',m.failed_imports]].map(([label,value]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join('');
+    if (m.personalization) document.getElementById('newsAdminMetrics').insertAdjacentHTML('beforeend', [['Followed interests',m.personalization.active_preferences],['Saved stories',m.personalization.saved_articles],['Recorded views',m.personalization.article_views],['Digest failures',m.personalization.digest_failures]].map(([label,value]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join(''));
+    document.getElementById('newsImportHistory').innerHTML = m.recent_imports.length ? `<div class="product-table-scroll"><table class="product-table"><thead><tr><th>Source</th><th>Started</th><th>Status</th><th>Imported</th><th>Errors</th></tr></thead><tbody>${m.recent_imports.map(row=>`<tr><td>${newsEscapeHtml(row.source_name||'Unknown')}</td><td>${newsEscapeHtml(row.started_at)}</td><td>${newsEscapeHtml(row.status)}</td><td>${row.items_imported}</td><td>${row.errors_found}</td></tr>`).join('')}</tbody></table></div>` : '<p>No imports recorded yet.</p>';
+}
+
+async function newsLoadArticles() {
+    const status=document.getElementById('newsArticleStatus')?.value||'pending_review', type=document.getElementById('newsArticleType')?.value||'', q=document.getElementById('newsArticleSearch')?.value||'';
+    try { const data=await newsAdminRequest(`articles&status=${encodeURIComponent(status)}&type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`); newsAdminState.articles=data.articles; newsRenderArticles(); } catch(error){newsAdminAlert(error.message,true);}
+}
+
+function newsRenderArticles() {
+    const body=document.getElementById('newsArticleRows'); if(!body)return;
+    body.innerHTML=newsAdminState.articles.length?newsAdminState.articles.map(a=>`<tr><td><label><input type="checkbox" data-news-select="${a.id}" aria-label="Select ${newsEscapeHtml(a.headline)}"> <strong>${newsEscapeHtml(a.headline)}</strong></label><small>${newsEscapeHtml(a.source_published_at||a.retrieved_at)}</small></td><td>${newsEscapeHtml(a.source_name||'Manual')}</td><td>${newsEscapeHtml(a.news_type)}</td><td>${newsEscapeHtml(a.relevance_score)}${a.similar_score?`<small>Similar ${a.similar_score}%</small>`:''}</td><td>${newsEscapeHtml(a.status)}</td><td><button class="btn-secondary" data-news-review="${a.id}">Review</button></td></tr>`).join(''):'<tr><td colspan="6" class="product-empty-state">No matching stories.</td></tr>';
+}
+
+function newsRenderSources() {
+    const body=document.getElementById('newsSourceRows');if(!body)return;
+    body.innerHTML=newsAdminState.sources.length?newsAdminState.sources.map(s=>`<tr><td><strong>${newsEscapeHtml(s.source_name)}</strong><small>${newsEscapeHtml(s.feed_url)}</small></td><td>${newsEscapeHtml(s.source_type)}</td><td>${newsEscapeHtml(s.last_error_message||s.last_success_at||'Never')}</td><td>${Number(s.is_active)?'Yes':'No'}</td><td><button class="btn-secondary" data-news-edit-source="${s.id}">Edit</button> <button class="btn-secondary" data-news-test="${s.id}">Test</button> <button class="btn-primary" data-news-import="${s.id}">Import</button></td></tr>`).join(''):'<tr><td colspan="5">No sources yet.</td></tr>';
+}
+
+function newsRenderCategories(){const target=document.getElementById('newsCategoryList');if(target)target.innerHTML=`<h2>Categories</h2><div class="news-admin-chip-list">${newsAdminState.categories.map(c=>`<button type="button" data-news-edit-category="${c.id}">${newsEscapeHtml(c.category_name)} <small>${newsEscapeHtml(c.news_type)} · ${Number(c.is_active)?'active':'disabled'}</small></button>`).join('')}</div>`;}
+
+async function newsAdminClick(event) {
+    const tab=event.target.closest('[data-news-tab]'); if(tab){document.querySelectorAll('[data-news-tab]').forEach(b=>b.classList.toggle('is-active',b===tab));document.querySelectorAll('[data-news-panel]').forEach(p=>p.hidden=p.dataset.newsPanel!==tab.dataset.newsTab);return;}
+    if(event.target.closest('[data-news-close]')){event.target.closest('dialog')?.close();return;}
+    const open=event.target.closest('[data-news-open]');if(open){document.getElementById(open.dataset.newsOpen==='source'?'newsSourceDialog':'newsManualDialog')?.showModal();return;}
+    const edit=event.target.closest('[data-news-edit-source]');if(edit){const source=newsAdminState.sources.find(s=>String(s.id)===edit.dataset.newsEditSource),form=document.getElementById('newsSourceForm');Object.entries(source||{}).forEach(([key,value])=>{const input=form.elements.namedItem(key);if(!input)return;if(input.type==='checkbox')input.checked=Number(value)===1;else input.value=value??'';});document.getElementById('newsSourceDialog').showModal();return;}
+    const editCategory=event.target.closest('[data-news-edit-category]');if(editCategory){const category=newsAdminState.categories.find(c=>String(c.id)===editCategory.dataset.newsEditCategory),form=document.getElementById('newsCategoryForm');Object.entries(category||{}).forEach(([key,value])=>{const input=form.elements.namedItem(key);if(!input)return;if(input.type==='checkbox')input.checked=Number(value)===1;else input.value=value??'';});form.scrollIntoView({behavior:'smooth'});return;}
+    const review=event.target.closest('[data-news-review]');if(review){const a=newsAdminState.articles.find(row=>String(row.id)===review.dataset.newsReview),form=document.getElementById('newsArticleForm');Object.entries(a||{}).forEach(([key,value])=>{const input=form.elements.namedItem(key);if(!input)return;if(input.type==='checkbox')input.checked=Number(value)===1;else if(input.type==='datetime-local')input.value=value?String(value).replace(' ','T').slice(0,16):'';else if(input.multiple){const chosen=String(value||'').split(',');Array.from(input.options).forEach(o=>o.selected=chosen.includes(o.value));}else input.value=value??'';});form.querySelector('[data-news-source-link]').href=a.source_url;document.getElementById('newsArticleDialog').showModal();return;}
+    const test=event.target.closest('[data-news-test]'),run=event.target.closest('[data-news-import]');if(test||run){const button=test||run;button.disabled=true;try{const data=await newsAdminRequest(test?'test_source':'import_source',{method:'POST',data:{source_id:button.dataset.newsTest||button.dataset.newsImport}});newsAdminAlert(test?`Feed test found ${data.preview.length} preview items.`:`Import complete: ${data.counts.imported} imported, ${data.counts.duplicates} duplicates.`);await newsLoadDashboard();await newsLoadArticles();}catch(error){newsAdminAlert(error.message,true);}finally{button.disabled=false;}return;}
+    if(event.target.closest('[data-news-summary]')){const id=document.getElementById('newsArticleForm').elements.id.value;try{await newsAdminRequest('queue_summary',{method:'POST',data:{article_id:id}});newsAdminAlert('Summary queued.');}catch(error){newsAdminAlert(error.message,true);}}
+}
+
+async function newsSubmitForm(event, action) {
+    event.preventDefault();const button=event.submitter;button.disabled=true;
+    try{const data=await newsAdminRequest(action,{method:'POST',data:newsFormData(event.currentTarget)});newsAdminAlert(data.message||'Saved.');event.currentTarget.closest('dialog')?.close();if(action==='save_category')event.currentTarget.reset();if(['save_source','save_category','save_entity','create_newsletter'].includes(action)){const fresh=await newsAdminRequest('bootstrap');newsAdminState={...newsAdminState,csrf:fresh.csrf_token,sources:fresh.sources,categories:fresh.categories,entities:fresh.entities,newsletters:fresh.newsletters||[]};newsFillSelects();newsRenderSources();newsRenderCategories();}if(action==='save_article'||action==='manual_article')await newsLoadArticles();}
+    catch(error){newsAdminAlert(error.message,true);}finally{button.disabled=false;}
+}
+
+function newsUpdateNewsletterPreview(){const select=document.querySelector('#newsNewsletterArticlesForm select[name="newsletter_id"]'),link=document.getElementById('newsNewsletterPreview');if(link)link.href=select?.value?`/admin/newsletter-preview.php?id=${encodeURIComponent(select.value)}`:'#';}
+async function newsBulkSubmit(event){event.preventDefault();const ids=Array.from(document.querySelectorAll('[data-news-select]:checked'),input=>input.dataset.newsSelect);if(!ids.length){newsAdminAlert('Select at least one article.',true);return;}try{await newsAdminRequest('bulk_articles',{method:'POST',data:{article_ids:ids,status:event.currentTarget.elements.status.value}});newsAdminAlert(`${ids.length} articles updated.`);await newsLoadArticles();await newsLoadDashboard();}catch(error){newsAdminAlert(error.message,true);}}
+async function newsImageSubmit(event){event.preventDefault();const form=event.currentTarget,data=new FormData(form),button=event.submitter;button.disabled=true;try{const response=await fetch('/admin/api/news/upload-image.php',{method:'POST',headers:{'X-CSRF-Token':newsAdminState.csrf},body:data}),payload=await response.json();if(!response.ok||!payload.success)throw new Error(payload.message||'Upload failed.');newsAdminAlert(`Image uploaded at ${payload.image.path}; approve it during article review.`);form.reset();}catch(error){newsAdminAlert(error.message,true);}finally{button.disabled=false;}}

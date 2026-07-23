@@ -47,7 +47,7 @@
             <!-- SOCIAL MEDIA ICONS -->
             <div class="social-icons">
 
-                <a href="#">
+                <a href="https://www.facebook.com/profile.php?id=61592027686378">
                     <img src="/images/Facebook-80x80.png"
                          alt="Norman on Facebook">
                 </a>

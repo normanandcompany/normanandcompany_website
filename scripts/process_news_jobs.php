@@ -1,0 +1,8 @@
+<?php
+declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+$root=dirname(__DIR__);require_once $root.'/config/env.php';require_once $root.'/classes/News/JobQueue.php';require_once $root.'/classes/News/SummaryService.php';
+try{$pdo=normanCreateDatabaseConnection('admin');$queue=new NewsJobQueue($pdo);$limit=max(1,min(100,(int)($argv[1]??25)));$processed=0;
+ while($processed<$limit&&($job=$queue->claim())){try{$payload=json_decode($job['payload_json'],true,512,JSON_THROW_ON_ERROR);if($job['job_type']==='generate_summary'){$stmt=$pdo->prepare('SELECT * FROM news_articles WHERE id=:id');$stmt->execute([':id'=>(int)$payload['article_id']]);$article=$stmt->fetch(PDO::FETCH_ASSOC);if(!$article)throw new RuntimeException('Article not found.');$result=(new NewsSummaryService(new ExtractiveNewsSummaryProvider()))->generate($article);$pdo->prepare("UPDATE news_articles SET generated_summary=:summary,generated_summary_provider=:provider,generated_summary_model=:model,generated_summary_created_at=NOW(),generated_summary_status='needs_review',generated_summary_confidence=:confidence WHERE id=:id")->execute([':summary'=>$result['summary'],':provider'=>$result['provider'],':model'=>$result['model'],':confidence'=>$result['confidence'],':id'=>$article['id']]);}else throw new RuntimeException('Unsupported job type.');$queue->finish((int)$job['id']);$processed++;}catch(Throwable $e){$queue->fail((int)$job['id'],$e->getMessage());$processed++;}}
+ fwrite(STDOUT,"Processed {$processed} news jobs.\n");exit(0);
+}catch(Throwable $e){fwrite(STDERR,"News worker failed: ".$e->getMessage()."\n");exit(1);}

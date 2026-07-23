@@ -1,3 +1,7 @@
+<?php
+$stylesPath = $_SERVER['DOCUMENT_ROOT'] . '/css/styles.css';
+$stylesVersion = is_file($stylesPath) ? (string) filemtime($stylesPath) : '20260721';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,7 +15,7 @@
     <meta name="author" content="Norman and Company">
 
     <link rel="canonical" href="https://www.normanandcompany.com/">
-    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/styles.css?v=<?= $stylesVersion ?>">
     <link rel="icon" href="/favicon.ico?v=20260719" type="image/x-icon" sizes="any">
     <link rel="icon" href="/images/favicon-32x32.png?v=20260719" type="image/png" sizes="32x32">
     <link rel="icon" href="/images/favicon-16x16.png?v=20260719" type="image/png" sizes="16x16">
@@ -33,7 +37,7 @@
     }
     </script>
 
-    <script src="/js/main.js" defer></script>
+    <script src="/js/main.js?v=<?= rawurlencode((string) filemtime(__DIR__ . '/../../js/main.js')) ?>" defer></script>
 </head>
 <body data-customer-area="true">
 

@@ -82,11 +82,13 @@ if ($adminJsVersion === '') {
             <ul>
                 <li><a href="/admin/index.php">Dashboard</a></li>
                 <li><a href="#" onclick="loadPage('calendar')">Calendar</a></li>
+                <li><a href="#" onclick="loadPage('tasks')">Tasks</a></li>
                 <li><a href="#" onclick="loadPage('products')">Products</a></li>
                 <li><a href="#" onclick="loadPage('users')">Users</a></li>
                 <li><a href="#" onclick="loadPage('transactions')">Transactions</a></li>
                 <li><a href="#" onclick="loadPage('travelcontent')">Travel Content</a></li>
                 <li><a href="#" onclick="loadPage('blogposts')">Blog Editor</a></li>
+                <li><a href="#" onclick="loadPage('news')">News Aggregator</a></li>
                 <li><a href="#" onclick="loadPage('apis')">Scrapers/API</a></li>
                 <li><a href="#" onclick="loadPage('reports')">Reports</a></li>
                 <li><a href="#" onclick="loadPage('settings')">Site Settings</a></li>

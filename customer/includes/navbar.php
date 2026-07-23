@@ -1,6 +1,6 @@
 <nav>
     <ul class="main-nav">
-        <li><a href="#" onclick="loadPage('editprofile')">Profile</a></li>
+        <li><a href="#" onclick="loadPage('home')">Profile</a></li>
         
         <li><a href="#" onclick="loadPage('about')">About Us</a></li>
 
@@ -62,6 +62,7 @@
             </ul>
         </li>
 
+        <li class="nav-dropdown"><span>My News</span><ul class="submenu"><li><a href="#" onclick="loadPage('mynews')">Personalized Feed</a></li><li><a href="#" onclick="loadPage('savednews')">Saved News</a></li><li><a href="#" onclick="loadPage('newspreferences')">News Preferences</a></li></ul></li>
         <li><a href="#" onclick="loadPage('blog')">Blog</a></li>
         <li><a href="#" onclick="loadPage('kidscorner')">Kids' Corner</a></li>
         <li><a href="#" onclick="loadPage('contact')">Contact</a></li>
