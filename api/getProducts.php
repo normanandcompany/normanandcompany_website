@@ -22,7 +22,26 @@ try {
         'p.is_active = 1'
     ];
 
-    $ebookCondition = "LOWER(REPLACE(COALESCE(bf.format_name, ''), '-', '')) = :ebook_format";
+    $bookRepresentativeCondition = "
+        p.id = (
+            SELECT representative.id
+            FROM products representative
+            LEFT JOIN book_formats representative_format
+                ON representative_format.id = representative.format_id
+            WHERE representative.product_category_id = 9
+                AND representative.product_name = p.product_name
+                AND representative.visible = 1
+                AND representative.is_active = 1
+            ORDER BY
+                CASE
+                    WHEN LOWER(REPLACE(COALESCE(representative_format.format_name, ''), '-', '')) = 'ebook'
+                        THEN 0
+                    ELSE 1
+                END,
+                representative.id ASC
+            LIMIT 1
+        )
+    ";
 
     if ($categoryId !== null && $categoryId !== '' && $categoryId !== 'all') {
         if (!ctype_digit((string) $categoryId)) {
@@ -33,12 +52,10 @@ try {
         $params[':category_id'] = (int) $categoryId;
 
         if ((int) $categoryId === 9) {
-            $where[] = $ebookCondition;
-            $params[':ebook_format'] = 'ebook';
+            $where[] = $bookRepresentativeCondition;
         }
     } else {
-        $where[] = "(p.product_category_id IS NULL OR p.product_category_id <> 9 OR {$ebookCondition})";
-        $params[':ebook_format'] = 'ebook';
+        $where[] = "(p.product_category_id IS NULL OR p.product_category_id <> 9 OR {$bookRepresentativeCondition})";
     }
 
     $sql = "
@@ -52,7 +69,6 @@ try {
             p.long_description,
             p.sku,
             p.price,
-            p.cost,
             p.inventory_count,
             p.image_url,
             p.seo_slug,
@@ -88,5 +104,6 @@ try {
 
     echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
 } catch (Throwable $e) {
-    sendProductsError($e->getMessage());
+    error_log('Public product list failed: ' . $e->getMessage());
+    sendProductsError('Products are temporarily unavailable.');
 }

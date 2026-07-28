@@ -1,8 +1,6 @@
 <nav>
     <ul class="main-nav">
         <li><a href="#" onclick="loadPage('home')">Profile</a></li>
-        
-        <li><a href="#" onclick="loadPage('about')">About Us</a></li>
 
         <li class="nav-dropdown"><a href="/products.php" onclick="loadProductCategory(event, 'all')">Store</a>
             <ul class="submenu">
@@ -22,8 +20,6 @@
             <span>Cruise Travel</span>
             <ul class="submenu">
                 <li><a href="#" onclick="loadPage('cruiselines')">Cruiselines</a></li>
-                <li><a href="#" onclick="loadPage('fleetinfo')">Fleet Info</a></li>
-                <li><a href="#" onclick="loadPage('shipreviews')">Ship Reviews</a></li>
                 <li><a href="#" onclick="loadPage('portinfo')">Port Info</a></li>
                 <li><a href="#" onclick="loadPage('cruisedestinations')">Cruise Destinations</a></li>
                 <li><a href="#" onclick="loadPage('shoreexcursions')">Shore Excursions</a></li>
@@ -36,7 +32,6 @@
             <span>Resort Travel</span>
             <ul class="submenu">
                 <li><a href="#" onclick="loadPage('resorts')">Resorts</a></li>
-                <li><a href="#" onclick="loadPage('resortreviews')">Resort Reviews</a></li>
                 <li><a href="#" onclick="loadPage('resortdestinations')">Resort Destinations</a></li>
                 <li><a href="#" onclick="loadPage('resortnews')">Resort News</a></li>
             </ul>

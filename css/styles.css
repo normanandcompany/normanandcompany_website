@@ -215,6 +215,24 @@ main li {
     line-height: 1.7;
 }
 
+.caribbean-travel-times ul,
+.travel-requirements-section ul {
+    margin-bottom: 3rem;
+    padding-left: 3rem;
+}
+
+.caribbean-travel-times li,
+.travel-requirements-section li {
+    padding-left: 0.35rem;
+}
+
+@media (max-width: 768px) {
+    .caribbean-travel-times ul,
+    .travel-requirements-section ul {
+        padding-left: 2rem;
+    }
+}
+
 main section {
     background: white;
     border-left: 6px solid var(--secondary);
@@ -339,7 +357,8 @@ main a:hover {
     outline-offset: 3px;
 }
 
-.port-card {
+.port-card,
+.resort-card {
     min-height: 170px;
     display: flex;
     flex-direction: column;
@@ -353,23 +372,28 @@ main a:hover {
 }
 
 .port-card:hover,
-.port-card:focus-visible {
+.port-card:focus-visible,
+.resort-card:hover,
+.resort-card:focus-visible {
     color: inherit;
     text-decoration: none;
     box-shadow: 0 6px 18px rgba(22, 58, 99, 0.2);
     transform: translateY(-2px);
 }
 
-.port-card:focus-visible {
+.port-card:focus-visible,
+.resort-card:focus-visible {
     outline: 3px solid var(--primary);
     outline-offset: 3px;
 }
 
-.port-card h2 {
+.port-card h2,
+.resort-card h2 {
     margin: 0 0 0.75rem;
 }
 
-.port-card p {
+.port-card p,
+.resort-card p {
     margin: 0.2rem 0;
 }
 
@@ -443,6 +467,219 @@ main a:hover {
     object-fit: cover;
 }
 
+.ship-detail-media,
+.resort-detail-media {
+    display: grid;
+    gap: 1rem;
+}
+
+.ship-review-button,
+.ship-review-submit-button,
+.resort-review-button,
+.resort-review-submit-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    padding: 0.75rem 1.25rem;
+    border: 0;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 800;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.ship-review-button:hover,
+.ship-review-button:focus,
+.ship-review-submit-button:hover,
+.ship-review-submit-button:focus,
+.resort-review-button:hover,
+.resort-review-button:focus,
+.resort-review-submit-button:hover,
+.resort-review-submit-button:focus {
+    background: var(--primary-accent);
+    color: #fff;
+}
+
+.ship-review-submit-button:disabled,
+.resort-review-submit-button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.ship-reviews,
+.resort-reviews {
+    margin-top: 2.5rem;
+}
+
+.ship-reviews-heading,
+.resort-reviews-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.ship-review-eyebrow,
+.resort-review-eyebrow {
+    margin: 0 0 0.25rem;
+    color: var(--primary);
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.ship-reviews-heading h2,
+.resort-reviews-heading h2 {
+    margin: 0;
+}
+
+.ship-review-average,
+.resort-review-average {
+    display: grid;
+    gap: 0.15rem;
+    margin: 0;
+    text-align: right;
+}
+
+.ship-review-average span,
+.ship-review-byline,
+.resort-review-average span,
+.resort-review-byline {
+    color: #596b69;
+    font-size: 0.9rem;
+}
+
+.ship-review-list,
+.resort-review-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.ship-review-card h3,
+.resort-review-card h3 {
+    margin: 0.25rem 0;
+}
+
+.ship-review-card > p:last-child,
+.resort-review-card > p:last-child {
+    line-height: 1.65;
+}
+
+.ship-review-photo,
+.resort-review-photo {
+    display: block;
+    width: min(100%, 720px);
+    max-height: 520px;
+    margin: 0 0 1rem;
+    border-radius: 10px;
+    object-fit: cover;
+}
+
+.ship-review-stars,
+.resort-review-stars {
+    margin: 0;
+    color: #e49a19;
+    font-size: 1.2rem;
+    letter-spacing: 0.08em;
+}
+
+.ship-review-byline,
+.resort-review-byline {
+    margin: 0 0 1rem;
+}
+
+.ship-review-empty p,
+.resort-review-empty p {
+    margin: 0;
+}
+
+.ship-review-form-page,
+.resort-review-form-page {
+    width: min(800px, 100%);
+    margin: 0 auto;
+}
+
+.ship-review-form-card form,
+.resort-review-form-card form {
+    max-width: none;
+}
+
+.ship-review-form-card .form-group,
+.resort-review-form-card .form-group {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.ship-review-form-card label,
+.resort-review-form-card label {
+    font-weight: 700;
+}
+
+.ship-review-form-card small,
+.resort-review-form-card small {
+    color: #596b69;
+}
+
+.optional-label {
+    color: #596b69;
+    font-weight: 400;
+}
+
+.ship-review-existing-photo,
+.resort-review-existing-photo {
+    display: grid;
+    gap: 0.75rem;
+    justify-items: start;
+}
+
+.ship-review-existing-photo[hidden],
+.resort-review-existing-photo[hidden] {
+    display: none;
+}
+
+.ship-review-existing-photo img,
+.resort-review-existing-photo img {
+    display: block;
+    width: min(100%, 420px);
+    max-height: 300px;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+.ship-review-existing-photo label,
+.resort-review-existing-photo label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ship-review-existing-photo input,
+.resort-review-existing-photo input {
+    width: auto;
+}
+
+.ship-review-form-message,
+.resort-review-form-message {
+    margin: 1rem 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid #8fd4c9;
+    border-radius: 8px;
+    background: #edf9f7;
+    color: #155f56;
+}
+
+.ship-review-form-message.is-error,
+.resort-review-form-message.is-error {
+    border-color: #e2a6a6;
+    background: #fff1f1;
+    color: #8a2424;
+}
+
 .ship-facts {
     display: grid;
     gap: 0.75rem;
@@ -465,7 +702,8 @@ main a:hover {
     margin: 0;
 }
 
-.port-detail-header {
+.port-detail-header,
+.resort-detail-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -479,22 +717,35 @@ main a:hover {
     overflow: visible;
 }
 
-.port-detail-header h1 {
+.port-detail-header h1,
+.resort-detail-header h1 {
     margin-bottom: 0.5rem;
 }
 
-.port-detail-header p {
+.port-detail-header p,
+.resort-detail-header p {
     margin: 0;
 }
 
-.port-detail-grid {
+.resort-contact-details {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.resort-contact-details strong {
+    font-weight: 700;
+}
+
+.port-detail-grid,
+.resort-detail-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
     gap: 1.5rem;
     align-items: start;
 }
 
-.port-detail-main {
+.port-detail-main,
+.resort-detail-main {
     display: grid;
     gap: 1.5rem;
 }
@@ -510,17 +761,20 @@ main a:hover {
     font-weight: 700;
 }
 
-.port-description {
+.port-description,
+.resort-description {
     line-height: 1.65;
 }
 
-.port-facts {
+.port-facts,
+.resort-facts {
     display: grid;
     gap: 0.75rem;
     margin: 1.5rem 0 0;
 }
 
-.port-facts div {
+.port-facts div,
+.resort-facts div {
     display: grid;
     grid-template-columns: minmax(120px, 0.4fr) 1fr;
     gap: 1rem;
@@ -528,16 +782,19 @@ main a:hover {
     border-bottom: 1px solid rgba(22, 58, 99, 0.12);
 }
 
-.port-facts dt {
+.port-facts dt,
+.resort-facts dt {
     font-weight: 700;
 }
 
-.port-facts dd {
+.port-facts dd,
+.resort-facts dd {
     margin: 0;
     overflow-wrap: anywhere;
 }
 
-.port-map {
+.port-map,
+.resort-map {
     display: block;
     width: 100%;
     min-height: 420px;
@@ -545,8 +802,17 @@ main a:hover {
     border-radius: 8px;
 }
 
-.port-map-link {
+.port-map-link,
+.resort-map-link {
     margin: 0.75rem 0 0;
+}
+
+.resort-detail-image {
+    display: block;
+    width: 100%;
+    max-height: 420px;
+    border-radius: 12px;
+    object-fit: cover;
 }
 
 form {
@@ -576,11 +842,24 @@ select {
 
     .cruise-line-info-grid,
     .ship-detail-layout,
-    .port-detail-grid {
+    .port-detail-grid,
+    .resort-detail-grid {
         grid-template-columns: 1fr;
     }
 
-    .port-detail-header {
+    .ship-reviews-heading,
+    .resort-reviews-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .ship-review-average,
+    .resort-review-average {
+        text-align: left;
+    }
+
+    .port-detail-header,
+    .resort-detail-header {
         align-items: flex-start;
         flex-direction: column;
     }
@@ -835,6 +1114,25 @@ main section.customer-profile {
     border-color: var(--primary);
     outline: 0;
     box-shadow: 0 0 0 3px rgba(22, 135, 201, 0.13);
+}
+
+.customer-profile__edit-form .customer-profile__sweepstakes-option {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid rgba(22, 58, 99, 0.15);
+    border-radius: 8px;
+    background: rgba(22, 135, 201, 0.05);
+    cursor: pointer;
+}
+
+.customer-profile__edit-form .customer-profile__sweepstakes-option input {
+    width: 18px;
+    min-height: 18px;
+    margin: 0;
+    accent-color: var(--primary);
 }
 
 .customer-profile__edit-form small {
@@ -1366,7 +1664,19 @@ footer li {
 }
 
 .product-image {
+    display: block;
     width: 250px;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+}
+
+.book-product-image {
+    width: min(100%, 250px);
+    aspect-ratio: 3 / 4;
+    background: #fff;
+    object-fit: contain;
+    object-position: center;
 }
 
 /* =========================================
@@ -1496,6 +1806,11 @@ footer li {
     background: #fff;
     object-fit: contain;
     padding: 0.5rem;
+}
+
+.book-product-detail-image {
+    aspect-ratio: 3 / 4;
+    object-position: center;
 }
 
 .product-image-carousel {

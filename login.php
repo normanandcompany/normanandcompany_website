@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- LOGIN PAGE -->
-<!-- File: /login.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/db.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';

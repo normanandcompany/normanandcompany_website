@@ -1,9 +1,3 @@
-<!-- ========================================= -->
-<!-- CUSTOMER PROFILE PAGE -->
-<!-- File: /customer/pages/home.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 requireRole('customer');
@@ -59,6 +53,28 @@ requireRole('customer');
                             <input type="text" id="customerLastName" name="last_name" maxlength="100" autocomplete="family-name" required>
                         </div>
                     </div>
+
+                    <div>
+                        <label for="customerBirthdate">Birth date</label>
+                        <input
+                            type="date"
+                            id="customerBirthdate"
+                            name="birthdate"
+                            max="<?= date('Y-m-d') ?>"
+                            autocomplete="bday"
+                            required
+                        >
+                    </div>
+
+                    <label class="customer-profile__checkbox customer-profile__sweepstakes-option">
+                        <input
+                            type="checkbox"
+                            id="customerSweepstakesActive"
+                            name="sweepstakes_active"
+                            value="1"
+                        >
+                        <span>Participate in sweepstakes</span>
+                    </label>
 
                     <div class="customer-profile__form-grid customer-profile__form-grid--two">
                         <div>

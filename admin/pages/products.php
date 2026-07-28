@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- PRODUCT MANAGEMENT PAGE -->
-<!-- File: /admin/pages/products.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 
@@ -147,6 +140,28 @@ requireRole('admin');
                         <select id="productBookFormatId" name="format_id" disabled>
                             <option value="">Select book format</option>
                         </select>
+                    </div>
+
+                    <div class="product-field-row">
+                        <div class="form-group stacked">
+                            <label for="productAsin">ASIN</label>
+                            <input
+                                type="text"
+                                id="productAsin"
+                                name="asin"
+                                maxlength="10"
+                            >
+                        </div>
+
+                        <div class="form-group stacked">
+                            <label for="productIsbn">ISBN</label>
+                            <input
+                                type="text"
+                                id="productIsbn"
+                                name="isbn"
+                                maxlength="13"
+                            >
+                        </div>
                     </div>
 
                     <div class="form-group stacked">

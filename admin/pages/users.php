@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- USER MANAGEMENT PAGE -->
-<!-- File: /admin/pages/users.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 
@@ -172,6 +165,28 @@ requireRole('admin');
 
                     <div class="product-field-row two-column">
                         <div class="form-group stacked">
+                            <label for="userBirthdate">Birth Date</label>
+                            <input
+                                type="date"
+                                id="userBirthdate"
+                                name="birthdate"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group stacked">
+                            <label for="userSweepstakesWonDate">Sweepstakes Won Date</label>
+                            <input
+                                type="date"
+                                id="userSweepstakesWonDate"
+                                readonly
+                                aria-readonly="true"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="product-field-row two-column">
+                        <div class="form-group stacked">
                             <label for="userRoleId">Role</label>
                             <select id="userRoleId" name="user_role_id" required>
                                 <option value="">Select role</option>
@@ -266,6 +281,27 @@ requireRole('admin');
                         <label class="toggle-row">
                             <input type="checkbox" id="userActive" name="is_active" value="1" checked>
                             <span>Active</span>
+                        </label>
+
+                        <label class="toggle-row">
+                            <input
+                                type="checkbox"
+                                id="userSweepstakesActive"
+                                name="sweepstakes_active"
+                                value="1"
+                                checked
+                            >
+                            <span>Sweepstakes Particpant</span>
+                        </label>
+
+                        <label class="toggle-row">
+                            <input
+                                type="checkbox"
+                                id="userSweepstakesWon"
+                                disabled
+                                aria-readonly="true"
+                            >
+                            <span>Sweepstakes Won</span>
                         </label>
                     </div>
                 </aside>

@@ -61,6 +61,8 @@ try {
             p.image_url9,
             p.image_url10,
             p.format_id,
+            p.asin,
+            p.isbn,
             pc.category_name,
             bf.format_name
         FROM products p

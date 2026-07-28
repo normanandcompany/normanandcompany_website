@@ -138,6 +138,25 @@ function dashboardFetchProductReviewMetrics(PDO $pdo): array
     return $metrics;
 }
 
+function dashboardFetchContactMetrics(PDO $pdo): array
+{
+    $stmt = dashboardExecuteQuery($pdo, "
+        SELECT
+            COUNT(*) AS total_contacts,
+            COALESCE(SUM(CASE
+                WHEN created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1
+                ELSE 0
+            END), 0) AS contacts_last_30_days
+        FROM norman_contacts
+    ");
+    $metrics = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    return [
+        'total_contacts' => dashboardIntValue($metrics['total_contacts'] ?? 0),
+        'contacts_last_30_days' => dashboardIntValue($metrics['contacts_last_30_days'] ?? 0)
+    ];
+}
+
 function dashboardPostedOrderItemSalesSubquery(): string
 {
     return "
@@ -533,6 +552,19 @@ try {
             pr.created_at DESC,
             pr.id DESC
         LIMIT 8
+    ");
+    $dashboard = array_merge($dashboard, dashboardFetchContactMetrics($pdo));
+    $dashboard['contacts'] = dashboardFetchRows($pdo, "
+        SELECT
+            id,
+            full_name,
+            email_address,
+            phone_number,
+            subject,
+            message,
+            created_at
+        FROM norman_contacts
+        ORDER BY created_at DESC, id DESC
     ");
     $dashboard = array_merge($dashboard, dashboardFetchFinancialMetrics($pdo));
 

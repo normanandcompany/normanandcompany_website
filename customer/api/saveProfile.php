@@ -42,15 +42,32 @@ try {
     $firstName = profileRequiredValue('first_name', 100, 'First name');
     $lastName = profileRequiredValue('last_name', 100, 'Last name');
     $email = strtolower(profileRequiredValue('email_address', 255, 'Email address'));
+    $birthdate = profileRequiredValue('birthdate', 10, 'Birth date');
+    $sweepstakesActive = isset($_POST['sweepstakes_active']) ? 1 : 0;
     $stateId = trim((string) ($_POST['state_prov_id'] ?? ''));
 
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new InvalidArgumentException('Enter a valid email address.');
     }
 
+    $birthdateValue = DateTimeImmutable::createFromFormat('!Y-m-d', $birthdate);
+    $birthdateErrors = DateTimeImmutable::getLastErrors();
+
+    if (
+        $birthdateValue === false
+        || ($birthdateErrors !== false
+            && ($birthdateErrors['warning_count'] > 0 || $birthdateErrors['error_count'] > 0))
+        || $birthdateValue->format('Y-m-d') !== $birthdate
+        || $birthdateValue > new DateTimeImmutable('today')
+    ) {
+        throw new InvalidArgumentException('Enter a valid birth date.');
+    }
+
     if ($stateId === '' || !ctype_digit($stateId) || (int) $stateId <= 0) {
         throw new InvalidArgumentException('Select a valid state or province.');
     }
+
+    $pdo->beginTransaction();
 
     $stmt = $pdo->prepare('CALL sp_update_customer_profile(
         :user_id,
@@ -81,6 +98,21 @@ try {
     $result = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     $stmt->closeCursor();
 
+    $accountFieldsStmt = $pdo->prepare('
+        UPDATE users
+        SET birthdate = :birthdate,
+            sweepstakes_active = :sweepstakes_active
+        WHERE id = :user_id
+          AND COALESCE(is_active, 1) = 1
+    ');
+    $accountFieldsStmt->execute([
+        ':birthdate' => $birthdate,
+        ':sweepstakes_active' => $sweepstakesActive,
+        ':user_id' => $userId
+    ]);
+
+    $pdo->commit();
+
     $_SESSION['email_address'] = $result['email_address'] ?? $email;
 
     sendCustomerProfileJson([
@@ -88,11 +120,19 @@ try {
         'message' => 'Account details updated.'
     ]);
 } catch (InvalidArgumentException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     sendCustomerProfileJson([
         'success' => false,
         'message' => $e->getMessage()
     ], 422);
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     error_log('Customer profile update procedure failed: ' . $e->getMessage());
     $knownMessages = [
         'That email address is already in use.',
@@ -115,6 +155,10 @@ try {
         'message' => $message
     ], 422);
 } catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     error_log('Customer profile update failed: ' . $e->getMessage());
     sendCustomerProfileJson([
         'success' => false,

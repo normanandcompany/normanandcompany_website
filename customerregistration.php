@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- USER REGISTRATION PAGE -->
-<!-- File: /userregistration.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/db.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
@@ -94,6 +87,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     placeholder="Last name"
                     size=30
                     required
+                    >
+                </div>
+
+                <!-- BIRTH DATE -->
+                <div class="form-group">
+                    <label for="birthdate">
+                        Birth Date:
+                    </label>
+
+                    <input
+                        type="date"
+                        id="birthdate"
+                        name="birthdate"
+                        max="<?= date('Y-m-d') ?>"
+                        required
                     >
                 </div>
 

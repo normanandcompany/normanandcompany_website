@@ -19,5 +19,7 @@ try {
 
     echo json_encode($product ?: []);
 } catch (Exception $e) {
-    echo json_encode(["error" => $e->getMessage()]);
+    error_log('Customer product details failed: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(["error" => "Product details are temporarily unavailable."]);
 }

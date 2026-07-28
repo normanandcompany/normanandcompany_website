@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- ADMIN CALENDAR PAGE -->
-<!-- File: /admin/pages/calendar.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 
@@ -102,9 +95,9 @@ $isCalendarConfigured = $calendarEmbedUrl !== '';
         <div class="admin-calendar-empty-state" role="status">
             <h2>Calendar Not Configured</h2>
             <?php if ($hasCalendarValue): ?>
-                <p>The calendar value in <code>.env</code> is not a valid Google Calendar embed URL.</p>
+                <p>The calendar value in <code>../normansecret/.env</code> is not a valid Google Calendar embed URL.</p>
             <?php else: ?>
-                <p>Add the Google Calendar embed URL to <code>NORMAN_ADMIN_CALENDAR_EMBED_URL</code> in <code>.env</code>.</p>
+                <p>Add the Google Calendar embed URL to <code>NORMAN_ADMIN_CALENDAR_EMBED_URL</code> in <code>../normansecret/.env</code>.</p>
             <?php endif; ?>
             <ol class="admin-calendar-setup-list">
                 <li>Open Google Calendar settings for the calendar you want to show.</li>

@@ -52,9 +52,21 @@ async function loadPage(pageName, options = {}) {
                     loadShipPage(options.shipId || null);
                     break;
 
+                case 'shipreview':
+                    initShipReviewForm(options.shipId || null);
+                    break;
+
                 // Page loader for resorts data
                 case 'resorts':
                     loadResorts();
+                    break;
+
+                case 'resort':
+                    loadResortPage(options.resortId || null);
+                    break;
+
+                case 'resortreview':
+                    initResortReviewForm(options.resortId || null);
                     break;
 
                 // Page loader for destination data
@@ -177,7 +189,20 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (content && !isStandalonePage) {
-        loadPage('home');
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestedCustomerPage = isCustomerArea() ? urlParams.get('page') : '';
+
+        if (requestedCustomerPage === 'shipreview') {
+            loadPage('shipreview', {
+                shipId: urlParams.get('ship_id')
+            });
+        } else if (requestedCustomerPage === 'resortreview') {
+            loadPage('resortreview', {
+                resortId: urlParams.get('resort_id')
+            });
+        } else {
+            loadPage('home');
+        }
     }
 });
 
@@ -351,6 +376,9 @@ function renderCruiseLinePage(cruiseLine, ships, container) {
 
     const aboutDetails = [
         `<p><strong>Cruise Line:</strong> ${formatDatabaseText(cruiseLine.cruise_line_name)}</p>`,
+        cruiseLine.rating !== null && cruiseLine.rating !== undefined && cruiseLine.rating !== ''
+            ? `<p><strong>Rating:</strong> ${formatDatabaseText(cruiseLine.rating)}</p>`
+            : '',
         cruiseLine.parent_company
             ? `<p><strong>Parent Company:</strong> ${formatDatabaseText(cruiseLine.parent_company)}</p>`
             : '',
@@ -635,16 +663,19 @@ async function loadShipPage(shipId) {
             throw new Error(data.error || `HTTP error! Status: ${response.status}`);
         }
 
-        renderShipPage(data.ship, container);
+        renderShipPage(data.ship, data.reviews || [], Boolean(data.can_review), container);
     } catch (error) {
         console.error('Error loading ship page:', error);
         container.innerHTML = '<div class="card"><p>Unable to load ship data.</p></div>';
     }
 }
 
-function renderShipPage(ship, container) {
+function renderShipPage(ship, reviews, canReview, container) {
     const imageUrl = getDatabaseImageUrl(ship.image_url, '/images/ships/');
     const meta = document.getElementById('page-title-meta');
+    const reviewUrl = canReview
+        ? `/customer/?page=shipreview&ship_id=${encodeURIComponent(ship.id)}`
+        : '/customerregistration.php';
 
     if (meta) {
         meta.dataset.title = `Norman and Company | ${ship.ship_name}`;
@@ -653,6 +684,7 @@ function renderShipPage(ship, container) {
 
     const facts = [
         ['Cruise line', ship.cruise_line_name],
+        ['Rating', ship.rating],
         ['Class', ship.ship_class],
         ['Passenger capacity', ship.passenger_capacity ? Number(ship.passenger_capacity).toLocaleString() : ''],
         ['Gross tonnage', ship.gross_tonnage ? Number(ship.gross_tonnage).toLocaleString() : ''],
@@ -668,11 +700,14 @@ function renderShipPage(ship, container) {
         </p>
 
         <div class="ship-detail-layout">
-            ${imageUrl ? `
-                <img src="${escapeHtml(imageUrl)}"
-                     alt="${escapeHtml(ship.ship_name)}"
-                     class="ship-detail-image">
-            ` : ''}
+            <div class="ship-detail-media">
+                ${imageUrl ? `
+                    <img src="${escapeHtml(imageUrl)}"
+                         alt="${escapeHtml(ship.ship_name)}"
+                         class="ship-detail-image">
+                ` : ''}
+                <a class="ship-review-button" href="${escapeHtml(reviewUrl)}">Write a Review</a>
+            </div>
 
             <article class="card ship-detail-card">
                 <h1>${escapeHtml(ship.ship_name)}</h1>
@@ -687,69 +722,565 @@ function renderShipPage(ship, container) {
                 ${ship.description ? `<p>${formatDatabaseText(ship.description)}</p>` : ''}
             </article>
         </div>
+
+        ${renderShipReviews(reviews)}
     `;
+}
+
+function renderShipReviews(reviews) {
+    const reviewList = Array.isArray(reviews) ? reviews : [];
+    const averageRating = reviewList.length
+        ? reviewList.reduce((total, review) => total + Number(review.rating || 0), 0) / reviewList.length
+        : 0;
+
+    return `
+        <section class="ship-reviews" aria-labelledby="shipReviewsTitle">
+            <div class="ship-reviews-heading">
+                <div>
+                    <p class="ship-review-eyebrow">Traveler feedback</p>
+                    <h2 id="shipReviewsTitle">Customer Ship Reviews</h2>
+                </div>
+                ${reviewList.length ? `
+                    <p class="ship-review-average">
+                        <strong>${averageRating.toFixed(1)} out of 5</strong>
+                        <span>${reviewList.length} ${reviewList.length === 1 ? 'review' : 'reviews'}</span>
+                    </p>
+                ` : ''}
+            </div>
+
+            ${reviewList.length ? `
+                <div class="ship-review-list">
+                    ${reviewList.map(review => {
+                        const rating = Math.max(1, Math.min(5, Number.parseInt(review.rating, 10) || 1));
+                        const reviewDate = review.created_at
+                            ? new Date(String(review.created_at).replace(' ', 'T')).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            })
+                            : '';
+
+                        return `
+                            <article class="card ship-review-card">
+                                <p class="ship-review-stars" aria-label="${rating} out of 5 stars">
+                                    <span aria-hidden="true">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span>
+                                </p>
+                                <h3>${escapeHtml(review.review_title)}</h3>
+                                <p class="ship-review-byline">
+                                    ${escapeHtml(review.reviewer_name || 'Norman and Company customer')}
+                                    ${reviewDate ? ` &middot; ${escapeHtml(reviewDate)}` : ''}
+                                </p>
+                                ${Number(review.has_photo) === 1 ? `
+                                    <img
+                                        class="ship-review-photo"
+                                        src="/customer/pages/shipreviewphoto.php?id=${encodeURIComponent(review.id)}&v=${encodeURIComponent(review.updated_at || '')}"
+                                        alt="Photo submitted with ${escapeHtml(review.review_title)}">
+                                ` : ''}
+                                <p>${formatDatabaseText(review.review_text)}</p>
+                            </article>
+                        `;
+                    }).join('')}
+                </div>
+            ` : `
+                <div class="card ship-review-empty">
+                    <p>No customer reviews have been published for this ship yet.</p>
+                </div>
+            `}
+        </section>
+    `;
+}
+
+let shipReviewCsrfToken = '';
+
+async function initShipReviewForm(shipId) {
+    const form = document.getElementById('shipReviewForm');
+    const id = Number.parseInt(shipId, 10);
+
+    if (!form) {
+        return;
+    }
+
+    if (!id) {
+        showShipReviewFormMessage('Select a valid ship to review.', true);
+        form.hidden = true;
+        return;
+    }
+
+    const backLink = document.getElementById('shipReviewBackLink');
+    if (backLink) {
+        backLink.href = `/pages/ship.php?id=${encodeURIComponent(id)}`;
+        backLink.addEventListener('click', event => openShipPage(event, id));
+    }
+
+    try {
+        const response = await fetch(`/customer/pages/shipreviewdata.php?ship_id=${encodeURIComponent(id)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Unable to load the review form.');
+        }
+
+        shipReviewCsrfToken = data.csrf_token || '';
+        document.getElementById('shipReviewShipId').value = String(id);
+        document.getElementById('shipReviewShipName').textContent = `Share your experience aboard ${data.ship.ship_name}.`;
+
+        if (data.review) {
+            document.getElementById('shipReviewRating').value = String(data.review.rating || '');
+            document.getElementById('shipReviewTitle').value = data.review.review_title || '';
+            document.getElementById('shipReviewText').value = data.review.review_text || '';
+            form.querySelector('button[type="submit"]').textContent = 'Update Review';
+
+            if (Number(data.review.has_photo) === 1) {
+                const existingPhoto = document.getElementById('shipReviewExistingPhoto');
+                const existingPhotoImage = document.getElementById('shipReviewExistingPhotoImage');
+                const existingPhotoInput = document.createElement('input');
+                existingPhotoInput.type = 'hidden';
+                existingPhotoInput.name = 'existing_photo';
+                existingPhotoInput.value = '1';
+                form.appendChild(existingPhotoInput);
+                existingPhotoImage.src = `/customer/pages/shipreviewphoto.php?id=${encodeURIComponent(data.review.id)}&v=${encodeURIComponent(data.review.updated_at || '')}`;
+                existingPhoto.hidden = false;
+            }
+        }
+
+        form.addEventListener('submit', submitShipReview);
+    } catch (error) {
+        console.error('Error loading ship review form:', error);
+        showShipReviewFormMessage(error.message, true);
+        form.hidden = true;
+    }
+}
+
+async function submitShipReview(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+
+    try {
+        const response = await fetch('/customer/pages/shipreviewdata.php', {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': shipReviewCsrfToken
+            },
+            body: new FormData(form)
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Unable to publish your review.');
+        }
+
+        showShipReviewFormMessage(data.message, false);
+        submitButton.textContent = 'Update Review';
+        form.querySelector('#shipReviewPhoto').value = '';
+    } catch (error) {
+        console.error('Error saving ship review:', error);
+        showShipReviewFormMessage(error.message, true);
+    } finally {
+        submitButton.disabled = false;
+    }
+}
+
+function showShipReviewFormMessage(message, isError) {
+    const messageElement = document.getElementById('shipReviewFormMessage');
+
+    if (!messageElement) {
+        return;
+    }
+
+    messageElement.textContent = message;
+    messageElement.classList.toggle('is-error', Boolean(isError));
+    messageElement.hidden = false;
 }
     
 // =========================================
-// RESORTS CARD UX
+// RESORT CARD AND DETAIL UX
 // =========================================
 
 async function loadResorts() {
-    // Get the HTML container where cards will be inserted
     const container = document.getElementById('resortsContainer');
 
-    // Stop if container does not exist
-    if (!container) return;
-
-    const url = '/api/getResorts.php';
+    if (!container) {
+        return;
+    }
 
     try {
-        const response = await fetch(url);
-
-        // Check for errors
-        if (!response.ok) {
-            throw new Error(`HTTP Error: ${response.status}`);
-        }
-
-        // Convert response to JSON
+        const response = await fetch('/api/getResorts.php');
         const resorts = await response.json();
 
-        // Clear loading message
+        if (!response.ok || !Array.isArray(resorts)) {
+            throw new Error(resorts.error || `HTTP error! Status: ${response.status}`);
+        }
+
         container.innerHTML = '';
 
-        // Loop through each resort
-        resorts.forEach(resort => { 
+        resorts.forEach(resort => {
+            const resortId = Number.parseInt(resort.id, 10);
 
-            // Create card element
-            const card = document.createElement('div');
-            card.classList.add('card');
+            if (!resortId) {
+                return;
+            }
 
-            // Build card HTML
-            card.innerHTML = `
-                <h3>${resort.resort_name}</h3>
-                <p><strong class="highlight-strong">${resort.country}</strong></p>
-                <p>${resort.resort_description}</p>
-                `;
-
-                // Add card to container
-                container.appendChild(card);
-    
+            const card = document.createElement('a');
+            card.classList.add('card', 'resort-card');
+            card.href = `/pages/resort.php?id=${encodeURIComponent(resortId)}`;
+            card.setAttribute('aria-label', `View ${resort.resort_name}`);
+            card.addEventListener('click', event => {
+                openResortPage(event, resortId);
             });
-
-        } catch (error) {
-
-            console.error('Error loading resorts:', error);
-
-            // Show user-friendly error
-            container.innerHTML = `
-                <div class="card">
-                    <h3>Error</h3>
-                    <p>Unable to load resort data.</p>
-                </div>
+            card.innerHTML = `
+                <h2>${formatDatabaseText(resort.resort_name)}</h2>
+                ${resort.city ? `<p>${formatDatabaseText(resort.city)}</p>` : ''}
+                ${resort.country ? `<p>${formatDatabaseText(resort.country)}</p>` : ''}
             `;
-        }  
 
+            container.appendChild(card);
+        });
+
+        if (!resorts.length) {
+            container.innerHTML = '<div class="card"><p>No resorts are currently available.</p></div>';
+        }
+    } catch (error) {
+        console.error('Error loading resorts:', error);
+        container.innerHTML = '<div class="card"><h3>Error</h3><p>Unable to load resort data.</p></div>';
     }
+}
+
+function openResortPage(event, resortId) {
+    event.preventDefault();
+    loadPage('resort', {
+        publicPage: true,
+        resortId
+    });
+}
+
+async function loadResortPage(resortId) {
+    const container = document.getElementById('resortDetail');
+    let id = Number.parseInt(resortId, 10);
+
+    if (!container) {
+        return;
+    }
+
+    if (!id) {
+        id = Number.parseInt(new URLSearchParams(window.location.search).get('id'), 10);
+    }
+
+    if (!id) {
+        container.innerHTML = '<div class="card"><p>A valid resort was not selected.</p></div>';
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/getResortPage.php?id=${encodeURIComponent(id)}`);
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP error! Status: ${response.status}`);
+        }
+
+        renderResortPage(data.resort, data.reviews || [], Boolean(data.can_review), container);
+    } catch (error) {
+        console.error('Error loading resort information:', error);
+        container.innerHTML = '<div class="card"><p>Unable to load resort information.</p></div>';
+    }
+}
+
+function renderResortPage(resort, reviews, canReview, container) {
+    const latitude = Number.parseFloat(resort.latitude);
+    const longitude = Number.parseFloat(resort.longitude);
+    const hasCoordinates = Number.isFinite(latitude)
+        && Number.isFinite(longitude)
+        && latitude >= -90
+        && latitude <= 90
+        && longitude >= -180
+        && longitude <= 180;
+    const meta = document.getElementById('page-title-meta');
+
+    if (meta) {
+        meta.dataset.title = `Norman and Company | ${resort.resort_name}`;
+        updatePageTitle();
+    }
+
+    const details = [
+        ['Resort name', resort.resort_name],
+        ['City', resort.city],
+        ['Country', resort.country],
+        ['Star rating', resort.star_rating],
+        ['Destination ID', resort.destination_id]
+    ].filter(([, value]) => value !== null && value !== undefined && String(value) !== '');
+
+    const imageUrl = getDatabaseImageUrl(resort.image_url, '/images/resorts/');
+    const websiteUrl = getSafeWebsiteUrl(resort.website_url);
+    const phoneNumber = String(resort.phone_number || '').trim();
+    const phoneHref = phoneNumber.replace(/[^\d+]/g, '');
+    const reviewUrl = canReview
+        ? `/customer/?page=resortreview&resort_id=${encodeURIComponent(resort.id)}`
+        : '/customerregistration.php';
+
+    let mapMarkup = '<p>Map coordinates are not available for this resort.</p>';
+
+    if (hasCoordinates) {
+        const latitudeDelta = 0.04;
+        const longitudeDelta = 0.06;
+        const bounds = [
+            longitude - longitudeDelta,
+            latitude - latitudeDelta,
+            longitude + longitudeDelta,
+            latitude + latitudeDelta
+        ].join(',');
+        const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&layer=mapnik&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
+        const fullMapUrl = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=14/${encodeURIComponent(latitude)}/${encodeURIComponent(longitude)}`;
+
+        mapMarkup = `
+            <iframe
+                class="resort-map"
+                src="${escapeHtml(mapUrl)}"
+                title="Map showing ${escapeHtml(resort.resort_name)}"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade">
+            </iframe>
+            <p class="resort-map-link">
+                <a href="${escapeHtml(fullMapUrl)}" target="_blank" rel="noopener noreferrer">
+                    View Larger Map
+                </a>
+            </p>
+        `;
+    }
+
+    container.innerHTML = `
+        <p><a href="/pages/resorts.php" onclick="loadPage('resorts', { publicPage: true }); return false;">&larr; Back to all resorts</a></p>
+
+        <header class="resort-detail-header">
+            <div>
+                <h1>${formatDatabaseText(resort.resort_name)}</h1>
+                <div class="resort-contact-details">
+                    <p>
+                        <strong>Address:</strong>
+                        ${resort.address ? formatDatabaseText(resort.address) : '&mdash;'}
+                    </p>
+                    <p>
+                        <strong>Phone:</strong>
+                        ${phoneNumber && phoneHref
+                            ? `<a href="tel:${escapeHtml(phoneHref)}">${formatDatabaseText(phoneNumber)}</a>`
+                            : '&mdash;'}
+                    </p>
+                </div>
+            </div>
+        </header>
+
+        <div class="resort-detail-grid">
+            <div class="resort-detail-main">
+                <div class="resort-detail-media">
+                    ${imageUrl ? `
+                        <img
+                            class="resort-detail-image"
+                            src="${escapeHtml(imageUrl)}"
+                            alt="${escapeHtml(resort.resort_name)}">
+                    ` : ''}
+                    <a class="resort-review-button" href="${escapeHtml(reviewUrl)}">Write a Review</a>
+                </div>
+
+                <article class="card resort-info-card">
+                    <h2>Resort Information</h2>
+                    ${resort.resort_description ? `<p class="resort-description">${formatDatabaseText(resort.resort_description)}</p>` : ''}
+                    <dl class="resort-facts">
+                        ${details.map(([label, value]) => `
+                            <div>
+                                <dt>${escapeHtml(label)}</dt>
+                                <dd>${formatDatabaseText(value)}</dd>
+                            </div>
+                        `).join('')}
+                    </dl>
+                    ${websiteUrl ? `
+                        <p>
+                            <a href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">
+                                Visit Resort Website
+                            </a>
+                        </p>
+                    ` : ''}
+                </article>
+            </div>
+
+            <article class="card resort-map-card">
+                <h2>Map</h2>
+                ${mapMarkup}
+            </article>
+        </div>
+
+        ${renderResortReviews(reviews)}
+    `;
+}
+
+function renderResortReviews(reviews) {
+    const reviewList = Array.isArray(reviews) ? reviews : [];
+    const averageRating = reviewList.length
+        ? reviewList.reduce((total, review) => total + Number(review.rating || 0), 0) / reviewList.length
+        : 0;
+
+    return `
+        <section class="resort-reviews" aria-labelledby="resortReviewsTitle">
+            <div class="resort-reviews-heading">
+                <div>
+                    <p class="resort-review-eyebrow">Traveler feedback</p>
+                    <h2 id="resortReviewsTitle">Customer Resort Reviews</h2>
+                </div>
+                ${reviewList.length ? `
+                    <p class="resort-review-average">
+                        <strong>${averageRating.toFixed(1)} out of 5</strong>
+                        <span>${reviewList.length} ${reviewList.length === 1 ? 'review' : 'reviews'}</span>
+                    </p>
+                ` : ''}
+            </div>
+
+            ${reviewList.length ? `
+                <div class="resort-review-list">
+                    ${reviewList.map(review => {
+                        const rating = Math.max(1, Math.min(5, Number.parseInt(review.rating, 10) || 1));
+                        const reviewDate = review.created_at
+                            ? new Date(String(review.created_at).replace(' ', 'T')).toLocaleDateString(undefined, {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            })
+                            : '';
+
+                        return `
+                            <article class="card resort-review-card">
+                                <p class="resort-review-stars" aria-label="${rating} out of 5 stars">
+                                    <span aria-hidden="true">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span>
+                                </p>
+                                <h3>${escapeHtml(review.review_title)}</h3>
+                                <p class="resort-review-byline">
+                                    ${escapeHtml(review.reviewer_name || 'Norman and Company customer')}
+                                    ${reviewDate ? ` &middot; ${escapeHtml(reviewDate)}` : ''}
+                                </p>
+                                ${Number(review.has_photo) === 1 ? `
+                                    <img
+                                        class="resort-review-photo"
+                                        src="/customer/pages/resortreviewphoto.php?id=${encodeURIComponent(review.id)}&v=${encodeURIComponent(review.updated_at || '')}"
+                                        alt="Photo submitted with ${escapeHtml(review.review_title)}">
+                                ` : ''}
+                                <p>${formatDatabaseText(review.review_text)}</p>
+                            </article>
+                        `;
+                    }).join('')}
+                </div>
+            ` : `
+                <div class="card resort-review-empty">
+                    <p>No customer reviews have been published for this resort yet.</p>
+                </div>
+            `}
+        </section>
+    `;
+}
+
+let resortReviewCsrfToken = '';
+
+async function initResortReviewForm(resortId) {
+    const form = document.getElementById('resortReviewForm');
+    const id = Number.parseInt(resortId, 10);
+
+    if (!form) {
+        return;
+    }
+
+    if (!id) {
+        showResortReviewFormMessage('Select a valid resort to review.', true);
+        form.hidden = true;
+        return;
+    }
+
+    const backLink = document.getElementById('resortReviewBackLink');
+    if (backLink) {
+        backLink.href = `/pages/resort.php?id=${encodeURIComponent(id)}`;
+        backLink.addEventListener('click', event => openResortPage(event, id));
+    }
+
+    try {
+        const response = await fetch(`/customer/pages/resortreviewdata.php?resort_id=${encodeURIComponent(id)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Unable to load the review form.');
+        }
+
+        resortReviewCsrfToken = data.csrf_token || '';
+        document.getElementById('resortReviewResortId').value = String(id);
+        document.getElementById('resortReviewResortName').textContent = `Share your experience at ${data.resort.resort_name}.`;
+
+        if (data.review) {
+            document.getElementById('resortReviewRating').value = String(data.review.rating || '');
+            document.getElementById('resortReviewTitle').value = data.review.review_title || '';
+            document.getElementById('resortReviewText').value = data.review.review_text || '';
+            form.querySelector('button[type="submit"]').textContent = 'Update Review';
+
+            if (Number(data.review.has_photo) === 1) {
+                const existingPhoto = document.getElementById('resortReviewExistingPhoto');
+                const existingPhotoImage = document.getElementById('resortReviewExistingPhotoImage');
+                const existingPhotoInput = document.createElement('input');
+                existingPhotoInput.type = 'hidden';
+                existingPhotoInput.name = 'existing_photo';
+                existingPhotoInput.value = '1';
+                form.appendChild(existingPhotoInput);
+                existingPhotoImage.src = `/customer/pages/resortreviewphoto.php?id=${encodeURIComponent(data.review.id)}&v=${encodeURIComponent(data.review.updated_at || '')}`;
+                existingPhoto.hidden = false;
+            }
+        }
+
+        form.addEventListener('submit', submitResortReview);
+    } catch (error) {
+        console.error('Error loading resort review form:', error);
+        showResortReviewFormMessage(error.message, true);
+        form.hidden = true;
+    }
+}
+
+async function submitResortReview(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+
+    try {
+        const response = await fetch('/customer/pages/resortreviewdata.php', {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': resortReviewCsrfToken
+            },
+            body: new FormData(form)
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Unable to publish your review.');
+        }
+
+        showResortReviewFormMessage(data.message, false);
+        submitButton.textContent = 'Update Review';
+        form.querySelector('#resortReviewPhoto').value = '';
+    } catch (error) {
+        console.error('Error saving resort review:', error);
+        showResortReviewFormMessage(error.message, true);
+    } finally {
+        submitButton.disabled = false;
+    }
+}
+
+function showResortReviewFormMessage(message, isError) {
+    const messageElement = document.getElementById('resortReviewFormMessage');
+
+    if (!messageElement) {
+        return;
+    }
+
+    messageElement.textContent = message;
+    messageElement.classList.toggle('is-error', Boolean(isError));
+    messageElement.hidden = false;
+}
 
 // =========================================
 // DESTINATIONS CARD UX
@@ -932,14 +1463,33 @@ async function loadTravelStore(categoryId = 'all') {
             const imageSrc = resolveProductImageSrc(product.image_url);
             const isApparel = Number(product?.is_apparel) === 1
                 || String(product?.category_name ?? '').toLowerCase().includes('apparel');
+            const isBook = isBookProduct(product);
+            const productImageClass = isBook
+                ? 'product-image book-product-image'
+                : 'product-image';
             const cartButtonLabel = isApparel ? 'Choose Options' : 'Add to Cart';
+            const productActionButton = isBook
+                ? `
+                    <button type="button"
+                            class="btn-secondary product-card-cart-button"
+                            onclick="event.stopPropagation(); openProduct(${Number(product.id)})">
+                        View Details
+                    </button>
+                `
+                : `
+                    <button type="button"
+                            class="btn-secondary product-card-cart-button"
+                            onclick="addProductToCartById(${Number(product.id)}, event)">
+                        ${cartButtonLabel}
+                    </button>
+                `;
 
             card.innerHTML = `
                 <div class="product-card-inner" onclick="openProduct(${Number(product.id)})">
 
                     <img src="${escapeHtml(imageSrc)}"
                         alt="${escapeHtml(product.product_name)}"
-                        class="product-image">
+                        class="${productImageClass}">
 
                     <h3>${escapeHtml(product.product_name)}</h3>
 
@@ -949,11 +1499,7 @@ async function loadTravelStore(categoryId = 'all') {
 
                     <p><strong>$${parseFloat(product.price).toFixed(2)}</strong></p>
 
-                    <button type="button"
-                            class="btn-secondary product-card-cart-button"
-                            onclick="addProductToCartById(${Number(product.id)}, event)">
-                        ${cartButtonLabel}
-                    </button>
+                    ${productActionButton}
 
                 </div>
             `;
@@ -1030,6 +1576,9 @@ function getProductImages(product) {
 function buildProductImageGallery(product) {
     const images = getProductImages(product);
     const productName = escapeHtml(product?.product_name);
+    const detailImageClass = isBookProduct(product)
+        ? 'product-detail-image book-product-detail-image'
+        : 'product-detail-image';
 
     if (images.length === 0) {
         return '';
@@ -1039,7 +1588,7 @@ function buildProductImageGallery(product) {
         return `
             <img src="${escapeHtml(images[0])}"
                  alt="${productName}"
-                 class="product-detail-image">
+                 class="${detailImageClass}">
         `;
     }
 
@@ -1056,7 +1605,7 @@ function buildProductImageGallery(product) {
 
             <img src="${escapeHtml(images[0])}"
                  alt="${productName}"
-                 class="product-detail-image">
+                 class="${detailImageClass}">
 
             <button type="button"
                     class="carousel-button carousel-button-right"
@@ -1171,7 +1720,11 @@ async function getProductSizeDropdown(product) {
 }
 
 function isBookProduct(product) {
-    return Number(product?.product_category_id) === 9;
+    const categoryName = String(product?.category_name ?? '').trim().toLowerCase();
+
+    return Number(product?.product_category_id) === 9
+        || categoryName === 'book'
+        || categoryName === 'books';
 }
 
 function getBookFormatOptions(product, formatOptions = []) {
@@ -1243,15 +1796,68 @@ function getBookFormatDropdown(product, formatOptions = []) {
     `;
 }
 
-function buildProductDetailsHtml(product, sizeDropdown = '', options = {}) {
-    const price = Number.parseFloat(product?.price);
-    const formattedPrice = Number.isFinite(price) ? price.toFixed(2) : '0.00';
-    const description = getProductDetailsDescription(product);
+function getProductPurchaseControls(product) {
+    if (isBookProduct(product)) {
+        const asin = String(product?.asin ?? '').trim();
+
+        if (!asin) {
+            return `
+                <button type="button"
+                        class="btn-primary add-to-cart-button"
+                        disabled>
+                    Buy
+                </button>
+            `;
+        }
+
+        const amazonUrl = `https://www.amazon.com/dp/${encodeURIComponent(asin)}`;
+
+        return `
+            <a class="btn-primary add-to-cart-button"
+               href="${escapeHtml(amazonUrl)}"
+               target="_blank"
+               rel="noopener noreferrer">
+                Buy
+            </a>
+        `;
+    }
+
     const productId = Number.parseInt(product?.id ?? 0, 10);
     const inventoryCount = Number.parseInt(product?.inventory_count ?? '', 10);
     const hasInventoryLimit = Number.isFinite(inventoryCount) && inventoryCount >= 0;
     const isOutOfStock = hasInventoryLimit && inventoryCount <= 0;
     const quantityMax = hasInventoryLimit ? `max="${inventoryCount}"` : '';
+
+    return `
+        <div class="form-group cart-quantity-field">
+            <label for="productQuantity">
+                Quantity:
+            </label>
+            <input
+                type="number"
+                id="productQuantity"
+                name="productQuantity"
+                min="1"
+                ${quantityMax}
+                value="1"
+                ${isOutOfStock ? 'disabled' : ''}
+            >
+        </div>
+
+        <!-- Add to cart button -->
+        <button type="button"
+                class="btn-primary add-to-cart-button"
+                onclick="addProductToCartFromDetails(${productId}, event)"
+                ${isOutOfStock ? 'disabled' : ''}>
+            ${isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+        </button>
+    `;
+}
+
+function buildProductDetailsHtml(product, sizeDropdown = '', options = {}) {
+    const price = Number.parseFloat(product?.price);
+    const formattedPrice = Number.isFinite(price) ? price.toFixed(2) : '0.00';
+    const description = getProductDetailsDescription(product);
     const backButton = options.includeBackButton ? `
         <button onclick="${options.backButtonAction || 'closeProduct()'}" class="btn-primary back-button">
             &larr; Back to Store
@@ -1284,28 +1890,7 @@ function buildProductDetailsHtml(product, sizeDropdown = '', options = {}) {
             <!-- Product Size Drop Down Box (if needed) -->
             ${sizeDropdown}
 
-            <div class="form-group cart-quantity-field">
-                <label for="productQuantity">
-                    Quantity:
-                </label>
-                <input
-                    type="number"
-                    id="productQuantity"
-                    name="productQuantity"
-                    min="1"
-                    ${quantityMax}
-                    value="1"
-                    ${isOutOfStock ? 'disabled' : ''}
-                >
-            </div>
-            
-            <!-- Add to cart button -->
-            <button type="button"
-                    class="btn-primary add-to-cart-button"
-                    onclick="addProductToCartFromDetails(${productId}, event)"
-                    ${isOutOfStock ? 'disabled' : ''}>
-                ${isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
-            </button>
+            ${getProductPurchaseControls(product)}
 
         </div>
     `;
@@ -2787,6 +3372,7 @@ async function fetchCustomerProfileJson(url, options = {}) {
 
 function renderCustomerProfileDetails(profile) {
     const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Customer';
+    const sweepstakesWon = Number(profile.sweepstakes_won) === 1;
     const details = document.getElementById('customerProfileDetails');
     const name = document.getElementById('customerProfileName');
     const avatar = document.getElementById('customerProfileAvatar');
@@ -2801,6 +3387,10 @@ function renderCustomerProfileDetails(profile) {
         details.innerHTML = `
             <div><dt>Email</dt><dd><a href="mailto:${escapeHtml(profile.email_address)}">${escapeHtml(profile.email_address || '—')}</a></dd></div>
             <div><dt>Phone</dt><dd>${escapeHtml(profile.phone || '—')}</dd></div>
+            <div><dt>Birth date</dt><dd>${escapeHtml(formatCustomerDate(profile.birthdate, { short: true }))}</dd></div>
+            <div><dt>Sweepstakes participation</dt><dd>${Number(profile.sweepstakes_active) === 1 ? 'Yes' : 'No'}</dd></div>
+            <div><dt>Sweepstakes winner</dt><dd>${sweepstakesWon ? 'Yes' : 'No'}</dd></div>
+            <div><dt>Winning date</dt><dd>${sweepstakesWon ? escapeHtml(formatCustomerDate(profile.sweepstakes_won_date, { short: true })) : '—'}</dd></div>
             <div><dt>Address</dt><dd>${address ? address.split('<br>').map(escapeHtml).join('<br>') : '—'}</dd></div>
             <div><dt>Last sign-in</dt><dd>${escapeHtml(formatCustomerDate(profile.last_login_at, { short: true }))}</dd></div>
         `;
@@ -2815,9 +3405,11 @@ function setCustomerProfileField(id, value) {
 function renderCustomerProfileEditForm() {
     const profile = customerProfileState.profile || {};
     const stateSelect = document.getElementById('customerStateProvince');
+    const sweepstakesActive = document.getElementById('customerSweepstakesActive');
 
     setCustomerProfileField('customerFirstName', profile.first_name);
     setCustomerProfileField('customerLastName', profile.last_name);
+    setCustomerProfileField('customerBirthdate', profile.birthdate);
     setCustomerProfileField('customerEmailAddress', profile.email_address);
     setCustomerProfileField('customerPhone', profile.phone);
     setCustomerProfileField('customerAddress1', profile.address_1);
@@ -2825,6 +3417,10 @@ function renderCustomerProfileEditForm() {
     setCustomerProfileField('customerCity', profile.city);
     setCustomerProfileField('customerPostalCode', profile.postal_code);
     setCustomerProfileField('customerCountry', profile.country);
+
+    if (sweepstakesActive) {
+        sweepstakesActive.checked = Number(profile.sweepstakes_active) === 1;
+    }
 
     if (stateSelect) {
         stateSelect.innerHTML = '';

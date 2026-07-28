@@ -16,8 +16,8 @@ function productDetailsSelectSql(string $whereClause): string
             p.product_description,
             p.long_description,
             p.sku,
+            p.asin,
             p.price,
-            p.cost,
             p.inventory_count,
             p.image_url,
             p.seo_slug,
@@ -118,8 +118,9 @@ try {
         'format_options' => $formatOptions
     ]);
 } catch (Throwable $e) {
+    error_log('Public product details failed: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode([
-        'error' => $e->getMessage()
+        'error' => 'Product details are temporarily unavailable.'
     ]);
 }

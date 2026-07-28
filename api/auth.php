@@ -7,11 +7,27 @@ ob_start();
 |--------------------------------------------------------------------------
 */
 
-// MUST be set BEFORE session_start()
+// MUST be set BEFORE session_start(). HTTPS is detected automatically in
+// production, with an environment override available for unusual proxies.
+$secureCookieSetting = strtolower(trim((string) getenv('NORMAN_SESSION_SECURE')));
+
+if (in_array($secureCookieSetting, ['1', 'true', 'yes', 'on'], true)) {
+    $secureSessionCookie = true;
+} elseif (in_array($secureCookieSetting, ['0', 'false', 'no', 'off'], true)) {
+    $secureSessionCookie = false;
+} else {
+    $secureSessionCookie =
+        (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
+}
+
+ini_set('session.use_only_cookies', '1');
+ini_set('session.use_strict_mode', '1');
+
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
-    'secure' => false,      // HTTPS only (set false locally if needed)
+    'secure' => $secureSessionCookie,
     'httponly' => true,
     'samesite' => 'Lax'
 ]);

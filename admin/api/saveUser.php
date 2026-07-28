@@ -18,10 +18,22 @@ try {
     $email = userRequiredString($_POST['email_address'] ?? '', 'Email');
     $roleId = userIntOrNull($_POST['user_role_id'] ?? '', 'User role');
     $stateProvId = userIntOrNull($_POST['state_prov_id'] ?? '', 'State/province');
+    $birthdate = userRequiredString($_POST['birthdate'] ?? '', 'Birth date');
     $password = (string) ($_POST['password'] ?? '');
 
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new InvalidArgumentException('Enter a valid email address.');
+    }
+
+    $birthdateValue = DateTimeImmutable::createFromFormat('!Y-m-d', $birthdate);
+    $birthdateErrors = DateTimeImmutable::getLastErrors();
+
+    if (
+        $birthdateValue === false
+        || ($birthdateErrors !== false && ($birthdateErrors['warning_count'] > 0 || $birthdateErrors['error_count'] > 0))
+        || $birthdateValue->format('Y-m-d') !== $birthdate
+    ) {
+        throw new InvalidArgumentException('Enter a valid birth date.');
     }
 
     if ($roleId === null) {
@@ -88,6 +100,8 @@ try {
         'state_prov_id' => $stateProvId,
         'postal_code' => userStringOrNull($_POST['postal_code'] ?? ''),
         'country' => userStringOrNull($_POST['country'] ?? ''),
+        'birthdate' => $birthdate,
+        'sweepstakes_active' => isset($_POST['sweepstakes_active']) ? 1 : 0,
         'visible' => isset($_POST['visible']) ? 1 : 0,
         'is_active' => isset($_POST['is_active']) ? 1 : 0
     ];

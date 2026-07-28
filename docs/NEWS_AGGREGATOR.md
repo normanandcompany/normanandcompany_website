@@ -31,7 +31,7 @@ Phase 1 remains independently usable. Phase 2 and Phase 3 must be applied in ord
 
 ## Configuration
 
-The existing database variables in `config/env.php` remain authoritative. Set these outside the public repository:
+The external `../normansecret/.env` file is authoritative and is loaded by `config/env.php`. Keep real values outside the public web directory and repository:
 
 - `NEWS_UNSUBSCRIBE_SECRET`: at least 32 random characters; required before users can create digest alerts.
 - `NEWS_MAIL_TRANSPORT`: leave unset or use `export`; set to `mail` only after HostGator email delivery is tested.

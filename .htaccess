@@ -1,4 +1,4 @@
-<Files ".env">
+<FilesMatch "(^\.|\.sql$|\.sqlite$|\.db$|\.bak$|\.backup$|^env\.php$|^cloudflare-analytics\.php$|^info\.php$)">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
@@ -6,4 +6,4 @@
         Order allow,deny
         Deny from all
     </IfModule>
-</Files>
+</FilesMatch>

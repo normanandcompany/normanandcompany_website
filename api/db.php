@@ -6,9 +6,10 @@ try {
     $pdo = normanCreateDatabaseConnection('web');
 
 } catch(Throwable $e) {
-
+    error_log('Website database connection failed: ' . $e->getMessage());
+    http_response_code(500);
     die(json_encode([
         "success" => false,
-        "message" => $e->getMessage()
+        "message" => "The website service is temporarily unavailable."
     ]));
 }

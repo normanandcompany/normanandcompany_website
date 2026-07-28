@@ -4,13 +4,13 @@ header('Content-Type: application/json');
 
 require_once 'db.php';
 
-$stmt = $pdo->prepare("CALL sp_get_all_resorts()");
+try {
+    $stmt = $pdo->prepare('CALL sp_get_resort_cards()');
+    $stmt->execute();
 
-$stmt->execute();
-
-$resorts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-echo json_encode($resorts);
-
-$stmt->closeCursor();
-?>
+    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    $stmt->closeCursor();
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Unable to load resort data.']);
+}

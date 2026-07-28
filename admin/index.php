@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- ADMIN INDEX PAGE -->
-<!-- File: /index.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 
@@ -85,6 +78,7 @@ if ($adminJsVersion === '') {
                 <li><a href="#" onclick="loadPage('tasks')">Tasks</a></li>
                 <li><a href="#" onclick="loadPage('products')">Products</a></li>
                 <li><a href="#" onclick="loadPage('users')">Users</a></li>
+                <li><a href="#" onclick="loadPage('bookchooser')">Sweepstakes</a></li>
                 <li><a href="#" onclick="loadPage('transactions')">Transactions</a></li>
                 <li><a href="#" onclick="loadPage('travelcontent')">Travel Content</a></li>
                 <li><a href="#" onclick="loadPage('blogposts')">Blog Editor</a></li>

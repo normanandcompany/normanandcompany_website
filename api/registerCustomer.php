@@ -14,6 +14,7 @@ try {
     // -------------------------
     $first_name    = $_POST['first-name'] ?? '';
     $last_name     = $_POST['last-name'] ?? '';
+    $birthdate     = trim((string) ($_POST['birthdate'] ?? ''));
     $email         = $_POST['email_address'] ?? '';
     $password      = $_POST['password'] ?? '';
     $confirm       = $_POST['password-confirm'] ?? '';
@@ -37,10 +38,28 @@ try {
         exit;
     }
 
-    if (empty($email) || empty($password)) {
+    if (empty($email) || empty($password) || $birthdate === '') {
         echo json_encode([
             "success" => false,
             "message" => "Required fields missing."
+        ]);
+        exit;
+    }
+
+    $birthdate_value = DateTimeImmutable::createFromFormat('!Y-m-d', $birthdate);
+    $birthdate_errors = DateTimeImmutable::getLastErrors();
+    $today = new DateTimeImmutable('today');
+
+    if (
+        $birthdate_value === false
+        || ($birthdate_errors !== false
+            && ($birthdate_errors['warning_count'] > 0 || $birthdate_errors['error_count'] > 0))
+        || $birthdate_value->format('Y-m-d') !== $birthdate
+        || $birthdate_value > $today
+    ) {
+        echo json_encode([
+            "success" => false,
+            "message" => "Enter a valid birth date."
         ]);
         exit;
     }
@@ -51,25 +70,47 @@ try {
     $password_hash = password_hash($password, PASSWORD_BCRYPT);
 
     // -------------------------
-    // Call stored procedure
+    // Create customer account
     // -------------------------
-    $stmt = $pdo->prepare("CALL sp_register_customer(
-        :first_name,
-        :last_name,
-        :email,
-        :password_hash,
-        :address_1,
-        :address_2,
-        :city,
-        :state_prov_id,
-        :postal_code,
-        :country,
-        :phone
-    )");
+    $stmt = $pdo->prepare("
+        INSERT INTO users (
+            first_name,
+            last_name,
+            birthdate,
+            email_address,
+            password_hash,
+            address_1,
+            address_2,
+            city,
+            state_prov_id,
+            postal_code,
+            country,
+            phone,
+            user_role_id,
+            created_at
+        )
+        VALUES (
+            :first_name,
+            :last_name,
+            :birthdate,
+            :email,
+            :password_hash,
+            :address_1,
+            :address_2,
+            :city,
+            :state_prov_id,
+            :postal_code,
+            :country,
+            :phone,
+            2,
+            NOW()
+        )
+    ");
 
     $stmt->execute([
         ':first_name'     => $first_name,
         ':last_name'      => $last_name,
+        ':birthdate'      => $birthdate,
         ':email'          => $email,
         ':password_hash'  => $password_hash,
         ':address_1'      => $address_1,
@@ -80,8 +121,6 @@ try {
         ':country'        => $country,
         ':phone'          => $phone
     ]);
-
-    $stmt->closeCursor();
 
     header("Location: /registrationsuccessful.php");
 

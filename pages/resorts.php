@@ -15,28 +15,7 @@
 
     <h1>Caribbean Resorts</h1>
 
-    <!-- ========================================= -->
-    <!-- RESORTS DYNAMIC CONTENT CONTAINER -->
-    <!-- Javascript will populate this section -->
-    <!-- ========================================= -->
-
-
     <div id="resortsContainer" class="card-grid">
-
-        <! -- Loading message -->
-            <p id="loadingMessage">Loading resorts...</p>
-
+        <p id="loadingMessage">Loading resorts...</p>
     </div>
-
-    <!-- ========================================= -->
-    <!-- PAGE-SPECIFIC SCRIPT -->
-    <!-- Loads resort JSON data -->
-    <!-- ========================================= -->
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            loadResorts();
-        });
-    </script>
-    
 </section>

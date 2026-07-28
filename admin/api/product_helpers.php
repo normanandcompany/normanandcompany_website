@@ -129,12 +129,6 @@ function saveProductImageUpload(string $field, string $productName, int $slot, a
         throw new RuntimeException(productUploadErrorMessage($error));
     }
 
-    $maxBytes = 10 * 1024 * 1024;
-
-    if ((int) $file['size'] > $maxBytes) {
-        throw new RuntimeException('Product images must be 10 MB or smaller.');
-    }
-
     $originalName = (string) ($file['name'] ?? '');
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];

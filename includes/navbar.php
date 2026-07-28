@@ -19,8 +19,6 @@
             <span>Cruise Travel</span>
             <ul class="submenu">
                 <li><a href="#" onclick="loadPage('cruiselines')">Cruiselines</a></li>
-                <li><a href="#" onclick="loadPage('fleetinfo')">Fleet Info</a></li>
-                <li><a href="#" onclick="loadPage('shipreviews')">Ship Reviews</a></li>
                 <li><a href="#" onclick="loadPage('portinfo')">Port Info</a></li>
             </ul>
         </li>
@@ -29,7 +27,6 @@
             <span>Resort Travel</span>
             <ul class="submenu">
                 <li><a href="#" onclick="loadPage('resorts')">Resorts</a></li>
-                <li><a href="#" onclick="loadPage('resortreviews')">Resort Reviews</a></li>
             </ul>
         </li>
 

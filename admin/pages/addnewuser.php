@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- ADD NEW USER PAGE -->
-<!-- File: /admin/pages/addnewuser.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 

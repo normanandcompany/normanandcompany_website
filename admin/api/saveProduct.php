@@ -117,6 +117,8 @@ try {
         'cost' => $cost,
         'inventory_count' => $inventoryCount ?? 0,
         'format_id' => $formatId,
+        'asin' => productStringOrNull($_POST['asin'] ?? ''),
+        'isbn' => productStringOrNull($_POST['isbn'] ?? ''),
         'seo_slug' => $seoSlug ?: productSlug($productName),
         'meta_title' => productStringOrNull($_POST['meta_title'] ?? ''),
         'meta_description' => productStringOrNull($_POST['meta_description'] ?? ''),

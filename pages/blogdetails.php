@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- BLOG DETAILS PAGE -->
-<!-- File: /pages/blogdetails.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once __DIR__ . '/../api/db.php';
 

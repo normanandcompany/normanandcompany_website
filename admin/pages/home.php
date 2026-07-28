@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- DASHBOARD PAGE -->
-<!-- File: /admin/pages/home.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 
@@ -27,6 +20,7 @@ requireRole('admin');
         <button type="button" class="dashboard-tab" id="dashboardTabButtonProducts" data-dashboard-tab="product-info" role="tab" aria-selected="false" aria-controls="dashboardTabProductInfo">Product Info</button>
         <button type="button" class="dashboard-tab" id="dashboardTabButtonProductPages" data-dashboard-tab="product-page-info" role="tab" aria-selected="false" aria-controls="dashboardTabProductPageInfo">Product Page Info</button>
         <button type="button" class="dashboard-tab" id="dashboardTabButtonCustomerReviews" data-dashboard-tab="customer-reviews" role="tab" aria-selected="false" aria-controls="dashboardTabCustomerReviews">Customer Reviews</button>
+        <button type="button" class="dashboard-tab" id="dashboardTabButtonContacts" data-dashboard-tab="contacts" role="tab" aria-selected="false" aria-controls="dashboardTabContacts">Contacts</button>
         <button type="button" class="dashboard-tab" id="dashboardTabButtonUsers" data-dashboard-tab="users" role="tab" aria-selected="false" aria-controls="dashboardTabUsers">Users</button>
         <button type="button" class="dashboard-tab" id="dashboardTabButtonFinancial" data-dashboard-tab="financial" role="tab" aria-selected="false" aria-controls="dashboardTabFinancial">Financial</button>
     </div>
@@ -297,6 +291,48 @@ requireRole('admin');
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- ========================================= -->
+    <!-- CONTACTS SECTION -->
+    <!-- ========================================= -->
+
+    <div class="dashboard-tab-panel" id="dashboardTabContacts" data-dashboard-panel="contacts" role="tabpanel" aria-labelledby="dashboardTabButtonContacts" hidden>
+    <strong class="highlight-strong">Contacts</strong>
+    <div class="card-grid dashboard-contact-metrics">
+        <div class="card">
+            <h3>Total Contacts</h3>
+            <span class="metric-value" data-field="total_contacts" data-format="integer">0</span>
+        </div>
+        <div class="card">
+            <h3>Contacts (Last 30 Days)</h3>
+            <span class="metric-value" data-field="contacts_last_30_days" data-format="integer">0</span>
+        </div>
+    </div>
+
+    <div class="product-table-panel dashboard-contact-panel">
+        <div class="dashboard-review-panel-header">
+            <h3>Contact Form Submissions</h3>
+            <span>Newest first</span>
+        </div>
+        <div class="product-table-scroll">
+            <table class="product-table dashboard-contact-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Subject and Message</th>
+                        <th>Contact Information</th>
+                        <th>Submitted</th>
+                    </tr>
+                </thead>
+                <tbody id="dashboardContactsBody">
+                    <tr>
+                        <td colspan="4" class="product-empty-state">Loading contacts...</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
     </div>

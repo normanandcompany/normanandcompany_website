@@ -780,6 +780,66 @@ footer li {
 }
 
 /* =========================================
+   CONTACTS DASHBOARD
+========================================= */
+
+.dashboard-contact-metrics {
+    grid-template-columns: repeat(2, minmax(190px, 280px));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.dashboard-contact-panel {
+    padding: 0;
+    overflow: hidden;
+}
+
+.dashboard-contact-table {
+    min-width: 900px;
+}
+
+.dashboard-contact-name,
+.dashboard-contact-message strong {
+    display: block;
+    color: var(--primary-accent);
+}
+
+.dashboard-contact-message {
+    min-width: 320px;
+    max-width: 620px;
+}
+
+.dashboard-contact-message p {
+    margin: 0.35rem 0 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+.dashboard-contact-details {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 200px;
+}
+
+.dashboard-contact-details a {
+    color: var(--primary);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-contact-unavailable {
+    color: rgba(27, 47, 79, 0.58);
+    font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+    .dashboard-contact-metrics {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =========================================
    CLOUDFLARE ANALYTICS DASHBOARD
 ========================================= */
 
@@ -2240,6 +2300,140 @@ tbody tr:nth-child(even) {
     margin: 0 0 0 1.25rem;
 }
 
+/* =========================================
+   BOOK CHOOSER
+========================================= */
+
+.book-chooser-page {
+    display: grid;
+    gap: 1.25rem;
+    max-width: 1100px;
+}
+
+.book-chooser-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.book-chooser-header h1,
+.book-recipient-heading h2 {
+    margin-bottom: 0.35rem;
+}
+
+.book-chooser-header p:last-child {
+    color: rgba(27, 47, 79, 0.72);
+}
+
+.book-chooser-button {
+    flex: 0 0 auto;
+    min-width: 190px;
+}
+
+.book-chooser-button:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+.book-chooser-empty,
+.book-recipient-card {
+    border: 1px solid rgba(22, 58, 99, 0.12);
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 8px 24px rgba(22, 58, 99, 0.08);
+}
+
+.book-chooser-empty {
+    padding: 3.5rem 2rem;
+    text-align: center;
+}
+
+.book-chooser-empty h2 {
+    margin-bottom: 0.65rem;
+    color: var(--primary-accent);
+}
+
+.book-chooser-empty p {
+    color: rgba(27, 47, 79, 0.68);
+}
+
+.book-recipient-card {
+    overflow: hidden;
+}
+
+.book-recipient-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(22, 58, 99, 0.1);
+    background: linear-gradient(135deg, rgba(22, 135, 201, 0.1), rgba(244, 223, 192, 0.35));
+}
+
+.book-recipient-badge {
+    padding: 0.55rem 0.8rem;
+    border-radius: 999px;
+    background: var(--primary-accent);
+    color: white;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.book-recipient-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.book-recipient-grid section {
+    min-width: 0;
+    padding: 1.5rem;
+    border-right: 1px solid rgba(22, 58, 99, 0.1);
+}
+
+.book-recipient-grid section:last-child {
+    border-right: 0;
+}
+
+.book-recipient-grid h3 {
+    margin-bottom: 1rem;
+    color: var(--primary-accent);
+    font-size: 1rem;
+}
+
+.book-recipient-grid dl {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+}
+
+.book-recipient-grid dt {
+    margin-bottom: 0.2rem;
+    color: rgba(27, 47, 79, 0.58);
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.book-recipient-grid dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.book-recipient-grid a {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.book-recipient-grid address {
+    color: var(--text);
+    font-style: normal;
+    line-height: 1.65;
+}
+
 @media (max-width: 980px) {
     .product-toolbar,
     .product-form-grid {
@@ -2248,6 +2442,19 @@ tbody tr:nth-child(even) {
 
     .product-form-grid {
         max-height: calc(100vh - 180px);
+    }
+
+    .book-recipient-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .book-recipient-grid section {
+        border-right: 0;
+        border-bottom: 1px solid rgba(22, 58, 99, 0.1);
+    }
+
+    .book-recipient-grid section:last-child {
+        border-bottom: 0;
     }
 }
 
@@ -2281,6 +2488,16 @@ tbody tr:nth-child(even) {
     .admin-calendar-header {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .book-chooser-header,
+    .book-recipient-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .book-chooser-button {
+        width: 100%;
     }
 
     .admin-calendar-open-link {

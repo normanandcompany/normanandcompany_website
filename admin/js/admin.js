@@ -35,6 +35,11 @@ async function loadPage(pageName) {
                 loadUsers();
                 break;
 
+            // Page loader for the complimentary book customer chooser
+            case 'bookchooser':
+                loadBookChooser();
+                break;
+
             // Page loader for task data
             case 'tasks':
                 loadTasks();
@@ -110,6 +115,138 @@ function updatePageTitle() {
         // Fallback
         document.title = "Norman and Company | Caribbean Travel";
     }
+}
+
+// =========================================
+// BOOK CHOOSER UX
+// =========================================
+
+function loadBookChooser() {
+    const chooseButton = document.getElementById('chooseBookRecipientBtn');
+
+    if (!chooseButton) return;
+
+    chooseButton.addEventListener('click', chooseRandomBookCustomer);
+}
+
+async function chooseRandomBookCustomer() {
+    const chooseButton = document.getElementById('chooseBookRecipientBtn');
+    const alert = document.getElementById('bookChooserAlert');
+    const emptyState = document.getElementById('bookChooserEmpty');
+    const recipientCard = document.getElementById('bookRecipientCard');
+
+    if (!chooseButton || !alert || !emptyState || !recipientCard) return;
+
+    chooseButton.disabled = true;
+    chooseButton.textContent = 'Choosing...';
+    alert.hidden = true;
+
+    try {
+        const response = await fetch('/admin/api/getRandomBookCustomer.php', {
+            method: 'POST',
+            cache: 'no-store',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        const result = await response.json();
+
+        if (!response.ok || !result.success || !result.customer) {
+            throw new Error(result.message || 'Unable to choose a customer.');
+        }
+
+        displayBookRecipient(result.customer);
+        emptyState.hidden = true;
+        recipientCard.hidden = false;
+        chooseButton.textContent = 'Choose Again';
+        alert.textContent = result.message || 'Winner selected and drawing recorded.';
+        alert.classList.remove('is-error');
+        alert.classList.add('is-success');
+        alert.hidden = false;
+    } catch (error) {
+        alert.textContent = error.message || 'Unable to choose a customer. Please try again.';
+        alert.classList.remove('is-success');
+        alert.classList.add('is-error');
+        alert.hidden = false;
+        chooseButton.textContent = recipientCard.hidden ? 'Choose a Customer' : 'Choose Again';
+    } finally {
+        chooseButton.disabled = false;
+    }
+}
+
+function displayBookRecipient(customer) {
+    const fullName = String(customer.full_name || '').trim() || 'Customer';
+    const email = String(customer.email_address || '').trim();
+    const phone = String(customer.phone || '').trim();
+    const addressLines = [
+        customer.address_1,
+        customer.address_2,
+        [customer.city, customer.state_province, customer.postal_code]
+            .map(value => String(value || '').trim())
+            .filter(Boolean)
+            .join(', ')
+            .replace(/,\s(?=[^,]+$)/, ' '),
+        customer.country
+    ]
+        .map(value => String(value || '').trim())
+        .filter(Boolean);
+
+    document.getElementById('bookRecipientName').textContent = fullName;
+    document.getElementById('bookRecipientId').textContent = String(customer.id || 'N/A');
+    document.getElementById('bookRecipientSince').textContent = formatBookChooserDate(customer.created_at);
+    document.getElementById('bookRecipientAge').textContent = Number.isFinite(Number(customer.age))
+        ? `${Number(customer.age)} years old`
+        : 'N/A';
+    document.getElementById('bookRecipientDrawingDate').textContent = formatBookChooserDate(
+        customer.sweepstakes_won_date
+    );
+
+    const emailLink = document.getElementById('bookRecipientEmail');
+    emailLink.textContent = email || 'Not provided';
+    emailLink.removeAttribute('target');
+    if (email) {
+        emailLink.href = `mailto:${email}`;
+    } else {
+        emailLink.removeAttribute('href');
+    }
+
+    const phoneLink = document.getElementById('bookRecipientPhone');
+    phoneLink.textContent = phone || 'Not provided';
+    if (phone) {
+        phoneLink.href = `tel:${phone.replace(/[^\d+]/g, '')}`;
+    } else {
+        phoneLink.removeAttribute('href');
+    }
+
+    const address = document.getElementById('bookRecipientAddress');
+    address.replaceChildren();
+
+    if (addressLines.length === 0) {
+        address.textContent = 'No shipping address on file.';
+        return;
+    }
+
+    addressLines.forEach((line, index) => {
+        if (index > 0) {
+            address.appendChild(document.createElement('br'));
+        }
+
+        address.appendChild(document.createTextNode(line));
+    });
+}
+
+function formatBookChooserDate(value) {
+    if (!value) return 'N/A';
+
+    const parsed = new Date(String(value).replace(' ', 'T'));
+
+    if (Number.isNaN(parsed.getTime())) return String(value);
+
+    return new Intl.DateTimeFormat('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+    }).format(parsed);
 }
 
 // =========================================
@@ -317,6 +454,7 @@ async function loadDashboard() {
         renderDashboardProductViewLists(dashboard);
         renderDashboardReviewProductList(dashboard);
         renderDashboardReviewTable(dashboard);
+        renderDashboardContacts(dashboard);
 
     } catch (err) {
 
@@ -586,6 +724,76 @@ function renderDashboardRatingPill(value) {
     }
 
     return `<span class="dashboard-review-rating">${rating}/5</span>`;
+}
+
+function renderDashboardContacts(dashboard) {
+    const tbody = document.getElementById('dashboardContactsBody');
+
+    if (!tbody) return;
+
+    const rows = Array.isArray(dashboard?.contacts) ? dashboard.contacts : [];
+
+    if (rows.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="product-empty-state">
+                    No contact form submissions recorded.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = rows.map((contact) => {
+        const fullName = String(contact.full_name || '').trim() || 'Name not provided';
+        const subject = String(contact.subject || '').trim() || 'No subject';
+        const message = String(contact.message || '').trim() || 'No message provided.';
+        const email = String(contact.email_address || '').trim();
+        const phone = String(contact.phone_number || '').trim();
+        const emailLink = email
+            ? `<a href="mailto:${encodeURIComponent(email)}">${adminEscapeHtml(email)}</a>`
+            : '<span class="dashboard-contact-unavailable">No email provided</span>';
+        const phoneLink = phone
+            ? `<a href="tel:${encodeURIComponent(phone)}">${adminEscapeHtml(phone)}</a>`
+            : '<span class="dashboard-contact-unavailable">No phone provided</span>';
+
+        return `
+            <tr>
+                <td>
+                    <strong class="dashboard-contact-name">${adminEscapeHtml(fullName)}</strong>
+                </td>
+                <td>
+                    <div class="dashboard-contact-message">
+                        <strong>${adminEscapeHtml(subject)}</strong>
+                        <p>${adminEscapeHtml(message)}</p>
+                    </div>
+                </td>
+                <td>
+                    <div class="dashboard-contact-details">
+                        ${emailLink}
+                        ${phoneLink}
+                    </div>
+                </td>
+                <td>${formatDashboardDateTime(contact.created_at)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function formatDashboardDateTime(value) {
+    if (!value) return 'N/A';
+
+    const normalizedValue = String(value).includes('T')
+        ? String(value)
+        : String(value).replace(' ', 'T');
+    const date = new Date(normalizedValue);
+
+    if (Number.isNaN(date.getTime())) return 'N/A';
+
+    return date.toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+    });
 }
 
 function initDashboardTabs() {
@@ -1741,6 +1949,8 @@ function applyProductFilters() {
         const searchable = [
             product.product_name,
             product.sku,
+            product.asin,
+            product.isbn,
             product.product_description,
             product.category_name
         ].join(' ').toLowerCase();
@@ -2022,6 +2232,8 @@ function openProductForm(product = null) {
     setProductFormValue('productCost', product?.cost || '');
     setProductFormValue('productPrice', product?.price || '');
     setProductFormValue('productBookFormatId', product?.format_id || '');
+    setProductFormValue('productAsin', product?.asin || '');
+    setProductFormValue('productIsbn', product?.isbn || '');
     setProductFormValue('productInventory', product?.inventory_count ?? 0);
     setProductFormValue('productSeoSlug', product?.seo_slug || '');
     setProductFormValue('productMetaTitle', product?.meta_title || '');
@@ -3356,6 +3568,8 @@ function openUserForm(user = null) {
     setUserFormValue('userLastName', user?.last_name || '');
     setUserFormValue('userEmailAddress', user?.email_address || '');
     setUserFormValue('userPhone', user?.phone || '');
+    setUserFormValue('userBirthdate', user?.birthdate || '');
+    setUserFormValue('userSweepstakesWonDate', user?.sweepstakes_won_date || '');
     setUserFormValue('userRoleId', user?.user_role_id || '');
     setUserFormValue('userPassword', '');
     setUserFormValue('userAddress1', user?.address_1 || '');
@@ -3372,9 +3586,17 @@ function openUserForm(user = null) {
 
     const visible = document.getElementById('userVisible');
     const active = document.getElementById('userActive');
+    const sweepstakesActive = document.getElementById('userSweepstakesActive');
+    const sweepstakesWon = document.getElementById('userSweepstakesWon');
 
     if (visible) visible.checked = isEditing ? Number(user.visible) === 1 : true;
     if (active) active.checked = isEditing ? Number(user.is_active) === 1 : true;
+    if (sweepstakesActive) {
+        sweepstakesActive.checked = isEditing ? Number(user.sweepstakes_active) === 1 : true;
+    }
+    if (sweepstakesWon) {
+        sweepstakesWon.checked = isEditing ? Number(user.sweepstakes_won) === 1 : false;
+    }
 
     updateUserPreview();
 

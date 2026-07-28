@@ -37,6 +37,7 @@ $pdo->exec("
             cl.website_url,
             cl.image_url,
             cl.image_size,
+            cl.rating,
             cl.parent_company,
             cl.history,
             cl.cruising_area,
@@ -60,6 +61,7 @@ $pdo->exec("
             cl.website_url,
             cl.image_url,
             cl.image_size,
+            cl.rating,
             cl.parent_company,
             cl.history,
             cl.cruising_area,
@@ -97,6 +99,7 @@ $pdo->exec("
         SELECT
             s.id,
             s.ship_name,
+            s.rating,
             s.ship_class,
             s.passenger_capacity,
             s.gross_tonnage,

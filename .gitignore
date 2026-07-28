@@ -6,7 +6,6 @@
 # Environment and password files
 .env
 .env.*
-!.env.example
 
 # Database exports and backups
 *.sql
@@ -14,6 +13,9 @@
 *.db
 *.bak
 *.backup
+
+# Large customer sample PDFs are deployed separately
+/customer/samples/
 
 # Compressed backup files
 *.zip
@@ -38,7 +40,7 @@ vendor/
 # JavaScript dependencies, if added later
 node_modules/
 
-# Local PHP configuration files
+# Private PHP configuration files
 /config/env.php
 /config/env copy.php
 /config/cloudflare-analytics.php

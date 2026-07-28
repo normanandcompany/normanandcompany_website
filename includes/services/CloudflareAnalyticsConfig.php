@@ -173,7 +173,7 @@ final class CloudflareAnalyticsConfig
             $path = dirname($documentRoot) . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'cloudflare-analytics.php';
         }
 
-        if (!is_file($path)) {
+        if (!@is_file($path)) {
             return [];
         }
 
@@ -243,11 +243,11 @@ final class CloudflareAnalyticsConfig
                 continue;
             }
 
-            if (!is_dir($candidate) && !@mkdir($candidate, 0700, true)) {
+            if (!@is_dir($candidate) && !@mkdir($candidate, 0700, true)) {
                 continue;
             }
 
-            if (is_dir($candidate) && is_writable($candidate)) {
+            if (@is_dir($candidate) && @is_writable($candidate)) {
                 return $candidate;
             }
         }
@@ -279,8 +279,8 @@ final class CloudflareAnalyticsConfig
 
     private static function pathIsInside(string $path, string $root): bool
     {
-        $normalizedPath = realpath($path) ?: $path;
-        $normalizedRoot = realpath($root) ?: $root;
+        $normalizedPath = @realpath($path) ?: $path;
+        $normalizedRoot = @realpath($root) ?: $root;
 
         $normalizedPath = rtrim(str_replace('\\', '/', $normalizedPath), '/');
         $normalizedRoot = rtrim(str_replace('\\', '/', $normalizedRoot), '/');

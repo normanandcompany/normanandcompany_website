@@ -69,7 +69,7 @@ The application checks environment variables first. If either Cloudflare value i
 
 ## Local Configuration
 
-Use `.env` for local development if that is how your local site is already configured. Do not commit `.env`.
+Use `../normansecret/.env` for local development to mirror the HostGator layout. The directory must be outside the public web directory, and the file must never be committed.
 
 ```ini
 CLOUDFLARE_API_TOKEN=replace_with_cloudflare_api_token

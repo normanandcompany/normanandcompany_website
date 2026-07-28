@@ -1,10 +1,3 @@
-<!-- ========================================= -->
-<!-- CUSTOMER REGISTRATION FAILED PAGE -->
-<!-- File: /registrationfailed.php -->
-<!-- Copyright 2026 @ Norman & Company -->
-<!-- Written by: Joe Leone -->
-<!-- ========================================= -->
-
 <?php include 'includes/header.php'; ?>
 
 <?php include 'includes/navbar.php'; ?>

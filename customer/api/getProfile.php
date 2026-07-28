@@ -5,6 +5,20 @@ $userId = requireCustomerProfileJson();
 require_once 'db.php';
 
 try {
+    $accountFieldsStmt = $pdo->prepare('
+        SELECT
+            birthdate,
+            sweepstakes_active,
+            sweepstakes_won,
+            sweepstakes_won_date
+        FROM users
+        WHERE id = :user_id
+          AND COALESCE(is_active, 1) = 1
+        LIMIT 1
+    ');
+    $accountFieldsStmt->execute([':user_id' => $userId]);
+    $accountFields = $accountFieldsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
     $stmt = $pdo->prepare('CALL sp_get_customer_profile(:user_id)');
     $stmt->execute([':user_id' => $userId]);
 
@@ -55,6 +69,11 @@ try {
             'message' => 'Your customer profile could not be found.'
         ], 404);
     }
+
+    $profile['birthdate'] = $accountFields['birthdate'] ?? null;
+    $profile['sweepstakes_active'] = (int) ($accountFields['sweepstakes_active'] ?? 0);
+    $profile['sweepstakes_won'] = (int) ($accountFields['sweepstakes_won'] ?? 0);
+    $profile['sweepstakes_won_date'] = $accountFields['sweepstakes_won_date'] ?? null;
 
     $itemsByOrder = [];
 

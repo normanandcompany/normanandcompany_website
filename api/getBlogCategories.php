@@ -16,10 +16,11 @@ try {
     $stmt->closeCursor();
 
 } catch (Exception $e) {
+    error_log('Public blog category list failed: ' . $e->getMessage());
     http_response_code(500);
 
     echo json_encode([
-        "error" => $e->getMessage()
+        "error" => "Blog categories are temporarily unavailable."
     ]);
 }
 ?>
