@@ -904,6 +904,7 @@ const userManagerState = {
 const downloadManagerState = {
     downloads: [],
     filteredDownloads: [],
+    categories: [],
     metrics: {}
 };
 
@@ -3789,18 +3790,32 @@ function bindDownloadManagerEvents() {
 
 async function refreshDownloads() {
     const tbody = document.getElementById('downloadsTableBody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">Loading downloads...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="product-empty-state">Loading downloads...</td></tr>';
 
     try {
         const data = await fetchAdminJson('/admin/api/downloads.php');
         downloadManagerState.downloads = Array.isArray(data.downloads) ? data.downloads : [];
+        downloadManagerState.categories = Array.isArray(data.categories) ? data.categories : [];
         downloadManagerState.metrics = data.metrics || {};
+        populateDownloadCategoryOptions();
         updateDownloadMetrics();
         applyDownloadFilters();
     } catch (error) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">Unable to load downloads.</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="product-empty-state">Unable to load downloads.</td></tr>';
         showDownloadAlert(error.message || 'Unable to load downloads.', 'error');
     }
+}
+
+function populateDownloadCategoryOptions() {
+    const select = document.getElementById('downloadCategory');
+    if (!select) return;
+
+    const selected = select.value;
+    select.innerHTML = '<option value="">Select a category</option>'
+        + downloadManagerState.categories.map((category) =>
+            `<option value="${adminEscapeHtml(category.id)}">${adminEscapeHtml(category.description)}</option>`
+        ).join('');
+    select.value = selected;
 }
 
 function updateDownloadMetrics() {
@@ -3836,7 +3851,7 @@ function renderDownloads() {
     if (!tbody) return;
 
     if (downloadManagerState.filteredDownloads.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">No downloads found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="product-empty-state">No downloads found.</td></tr>';
         return;
     }
 
@@ -3851,6 +3866,7 @@ function renderDownloads() {
 
         return `<tr>
             <td><strong>${adminEscapeHtml(download.title)}</strong></td>
+            <td>${adminEscapeHtml(download.category_description || 'Unassigned')}</td>
             <td class="download-description-cell">${adminEscapeHtml(download.description)}</td>
             <td>${adminEscapeHtml(download.filename)}${fileExists ? '' : '<br><small>Not in storage</small>'}</td>
             <td>${status}</td>
@@ -3880,6 +3896,7 @@ function openDownloadForm(download = null) {
     document.getElementById('downloadFormTitle').textContent = isEditing ? 'Edit Download' : 'Add Download';
     document.getElementById('downloadId').value = download?.id || '';
     document.getElementById('downloadTitle').value = download?.title || '';
+    document.getElementById('downloadCategory').value = download?.download_category_id || '';
     document.getElementById('downloadDescription').value = download?.description || '';
     document.getElementById('downloadFilename').value = download?.filename || '';
     document.getElementById('downloadKey').value = download?.download_key || createDownloadKey();

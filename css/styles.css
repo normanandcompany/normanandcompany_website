@@ -350,6 +350,28 @@ main a:hover {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
+.downloads-filter {
+    display: grid;
+    max-width: 360px;
+    gap: 0.45rem;
+    margin: 0 0 1.75rem;
+}
+
+.downloads-filter label {
+    color: var(--primary-accent);
+    font-weight: 800;
+}
+
+.downloads-filter select {
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid rgba(22, 58, 99, 0.25);
+    border-radius: 8px;
+    background: white;
+    color: var(--primary-accent);
+    font: inherit;
+}
+
 .download-card {
     position: relative;
     display: flex;
@@ -383,6 +405,13 @@ main a:hover {
     color: var(--primary);
     font-size: 0.75rem;
     font-weight: 800;
+}
+
+.download-card__category {
+    margin: -0.45rem 0 0.75rem;
+    color: rgba(27, 47, 79, 0.7);
+    font-size: 0.82rem;
+    font-weight: 700;
 }
 
 .download-card h2 {

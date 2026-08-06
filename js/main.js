@@ -123,6 +123,10 @@ async function loadPage(pageName, options = {}) {
                     initBlogArticles();
                     break;
 
+                case 'downloads':
+                    initCustomerDownloads();
+                    break;
+
                 case 'home':
                     if (isCustomerArea()) {
                         initCustomerProfile();
@@ -166,6 +170,30 @@ async function loadPage(pageName, options = {}) {
     } catch (error) {
         console.error('Error loading page:', error);
     }
+}
+
+function initCustomerDownloads() {
+    const filter = document.getElementById('downloadCategoryFilter');
+    const cards = Array.from(document.querySelectorAll('[data-download-category-id]'));
+    const emptyMessage = document.getElementById('downloadsEmptyFilter');
+    if (!filter) return;
+
+    const applyFilter = () => {
+        const selectedCategory = filter.value;
+        let visibleCount = 0;
+
+        cards.forEach((card) => {
+            const visible = selectedCategory === 'all'
+                || card.dataset.downloadCategoryId === selectedCategory;
+            card.hidden = !visible;
+            if (visible) visibleCount++;
+        });
+
+        if (emptyMessage) emptyMessage.hidden = visibleCount !== 0;
+    };
+
+    filter.addEventListener('change', applyFilter);
+    applyFilter();
 }
 
 // =========================================

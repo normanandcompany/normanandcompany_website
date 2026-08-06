@@ -47,10 +47,14 @@ function filenameExists(PDO $pdo, string $filename, int $excludeId = 0): bool
 
 try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $rows = $pdo->query("SELECT id, title, description, filename, download_key, viewable,
-            download_count, created_at, updated_at
-            FROM downloads
-            ORDER BY created_at DESC, id DESC")->fetchAll(PDO::FETCH_ASSOC);
+        $categories = $pdo->query('SELECT id, description FROM download_category ORDER BY id ASC')
+            ->fetchAll(PDO::FETCH_ASSOC);
+        $rows = $pdo->query("SELECT d.id, d.download_category_id, dc.description AS category_description,
+            d.title, d.description, d.filename, d.download_key, d.viewable,
+            d.download_count, d.created_at, d.updated_at
+            FROM downloads d
+            LEFT JOIN download_category dc ON dc.id = d.download_category_id
+            ORDER BY d.created_at DESC, d.id DESC")->fetchAll(PDO::FETCH_ASSOC);
         $storageDirectory = downloadStorageDirectory();
 
         foreach ($rows as &$row) {
@@ -72,6 +76,7 @@ try {
         sendDownloadJson([
             'success' => true,
             'downloads' => $rows,
+            'categories' => $categories,
             'metrics' => [
                 'available' => $available,
                 'total_downloads' => $totalDownloads,
@@ -113,8 +118,15 @@ try {
 
     $title = downloadRequiredText($_POST['title'] ?? '', 'Title', 180);
     $description = downloadRequiredText($_POST['description'] ?? '', 'Description', 10000);
+    $downloadCategoryId = downloadInt($_POST['download_category_id'] ?? '', 'Download category');
     $viewable = isset($_POST['viewable']) ? 1 : 0;
     $downloadKey = strtolower(trim((string) ($_POST['download_key'] ?? '')));
+
+    $category = $pdo->prepare('SELECT COUNT(*) FROM download_category WHERE id = :id');
+    $category->execute([':id' => $downloadCategoryId]);
+    if ((int) $category->fetchColumn() === 0) {
+        throw new InvalidArgumentException('Select a valid download category.');
+    }
 
     if ($downloadKey === '') {
         do {
@@ -211,19 +223,22 @@ try {
         $pdo->beginTransaction();
 
         if ($id > 0) {
-            $stmt = $pdo->prepare("UPDATE downloads SET title = :title, description = :description,
+            $stmt = $pdo->prepare("UPDATE downloads SET download_category_id = :download_category_id,
+                title = :title, description = :description,
                 filename = :filename, download_key = :download_key, viewable = :viewable
                 WHERE id = :id");
             $stmt->execute([
+                ':download_category_id' => $downloadCategoryId,
                 ':title' => $title, ':description' => $description, ':filename' => $filename,
                 ':download_key' => $downloadKey, ':viewable' => $viewable,
                 ':id' => $id
             ]);
         } else {
             $stmt = $pdo->prepare("INSERT INTO downloads
-                (title, description, filename, download_key, viewable)
-                VALUES (:title, :description, :filename, :download_key, :viewable)");
+                (download_category_id, title, description, filename, download_key, viewable)
+                VALUES (:download_category_id, :title, :description, :filename, :download_key, :viewable)");
             $stmt->execute([
+                ':download_category_id' => $downloadCategoryId,
                 ':title' => $title, ':description' => $description, ':filename' => $filename,
                 ':download_key' => $downloadKey, ':viewable' => $viewable
             ]);

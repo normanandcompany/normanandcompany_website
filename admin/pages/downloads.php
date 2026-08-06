@@ -41,8 +41,8 @@ requireRole('admin');
     <div class="product-table-panel">
         <div class="product-table-scroll">
             <table class="product-table download-table">
-                <thead><tr><th>Title</th><th>Description</th><th>Filename</th><th>Viewable</th><th>Link</th><th>Downloads</th><th>Actions</th></tr></thead>
-                <tbody id="downloadsTableBody"><tr><td colspan="7" class="product-empty-state">Loading downloads...</td></tr></tbody>
+                <thead><tr><th>Title</th><th>Category</th><th>Description</th><th>Filename</th><th>Viewable</th><th>Link</th><th>Downloads</th><th>Actions</th></tr></thead>
+                <tbody id="downloadsTableBody"><tr><td colspan="8" class="product-empty-state">Loading downloads...</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -62,6 +62,12 @@ requireRole('admin');
                     <div class="form-group stacked">
                         <label for="downloadTitle">Title</label>
                         <input type="text" id="downloadTitle" name="title" maxlength="180" required>
+                    </div>
+                    <div class="form-group stacked">
+                        <label for="downloadCategory">Download category</label>
+                        <select id="downloadCategory" name="download_category_id" required>
+                            <option value="">Select a category</option>
+                        </select>
                     </div>
                     <div class="form-group stacked">
                         <label for="downloadDescription">Description</label>
