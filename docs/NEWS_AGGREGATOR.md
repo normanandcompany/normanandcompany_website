@@ -12,7 +12,7 @@ External article bodies are never imported. Feed descriptions are reduced to pla
 - `classes/News/`: repositories and import, duplication, classification, queue, image, newsletter, recommendation, and security services.
 - `connectors/news/`: common connector interface plus RSS/Atom and JSON implementations.
 - `admin/pages/news.php`, `admin/api/news/`: authenticated editorial UI and endpoints.
-- `news.php`, `api/news/search.php`, `sitemap-news.php`: public pages, search API, and sitemap.
+- `customer/news.php`, `api/news/search.php`, `customer/sitemap-news.php`: public pages, search API, and sitemap.
 - `customer/pages/` and `customer/api/news.php`: preference, feed, saved-news, alert, and privacy features.
 - `scripts/`: CLI import, background-job, and digest workers.
 - `config/news.example.php`: non-secret configuration reference.
@@ -64,14 +64,14 @@ Duplicate matching checks source/external ID, normalized URL, content hash, and 
 
 Use **Review** to edit the public headline, slug, summaries, category, entities, keywords, metadata, dates, image permission details, and status. `published` articles need a publication timestamp and then appear at:
 
-- `/news.php`
-- `/news.php?type=cruise`
-- `/news.php?type=resort`
-- `/news.php?category=category-slug`
-- `/news.php?source=source-slug`
-- `/news.php?article=article-slug`
+- `/customer/news.php`
+- `/customer/news.php?type=cruise`
+- `/customer/news.php?type=resort`
+- `/customer/news.php?category=category-slug`
+- `/customer/news.php?source=source-slug`
+- `/customer/news.php?article=article-slug`
 
-Rejected and archived stories never appear publicly. Every public detail page labels the source and links to the complete external story with safe link attributes. The XML sitemap is `/sitemap-news.php`.
+Rejected and archived stories never appear publicly. Every public detail page labels the source and links to the complete external story with safe link attributes. The XML sitemap is `/customer/sitemap-news.php`.
 
 ## Classification, summaries, related stories, and jobs
 

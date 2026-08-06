@@ -34,7 +34,7 @@ Use disposable test records and a non-production database. Record pass/fail and 
 1. Browse all, cruise, resort, category, source, entity, date, and keyword searches with multiple pages.
 2. Disable JavaScript and repeat listing, filtering, pagination, and article navigation.
 3. Open published, future, missing, rejected, and archived slugs; only current published stories should render.
-4. Verify escaped headline/summary/entity output, source attribution, `noopener noreferrer`, canonical/OG tags, JSON-LD, breadcrumbs, image alt text, and `/sitemap-news.php`.
+4. Verify escaped headline/summary/entity output, source attribution, `noopener noreferrer`, canonical/OG tags, JSON-LD, breadcrumbs, image alt text, and `/customer/sitemap-news.php`.
 5. Test keyboard navigation, visible focus, 200% zoom, narrow mobile layout, and screen-reader labels/status messages.
 
 ## Personalization and privacy

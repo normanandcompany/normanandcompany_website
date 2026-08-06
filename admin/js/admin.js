@@ -59,6 +59,14 @@ async function loadPage(pageName) {
                 initNewsAdmin();
                 break;
 
+            case 'emailtools':
+                initEmailTools();
+                break;
+
+            case 'downloads':
+                initDownloadManager();
+                break;
+
             // Page loader for resorts data
             case 'resorts':
                 loadResorts();
@@ -891,6 +899,12 @@ const userManagerState = {
     states: [],
     currentPage: 1,
     perPage: 10
+};
+
+const downloadManagerState = {
+    downloads: [],
+    filteredDownloads: [],
+    metrics: {}
 };
 
 const taskManagerState = {
@@ -3724,6 +3738,258 @@ async function refreshUsers() {
 }
 
 // =====================================
+// Download Manager
+// =====================================
+
+async function initDownloadManager() {
+    if (!document.getElementById('downloadsTableBody')) return;
+
+    bindDownloadManagerEvents();
+    await refreshDownloads();
+}
+
+function bindDownloadManagerEvents() {
+    const dialog = document.getElementById('downloadFormDialog');
+    const search = document.getElementById('downloadSearchInput');
+    const visibility = document.getElementById('downloadVisibilityFilter');
+
+    document.getElementById('addDownloadBtn')?.addEventListener('click', () => openDownloadForm());
+    document.getElementById('resetDownloadFiltersBtn')?.addEventListener('click', () => {
+        if (search) search.value = '';
+        if (visibility) visibility.value = 'all';
+        applyDownloadFilters();
+    });
+    search?.addEventListener('input', applyDownloadFilters);
+    visibility?.addEventListener('change', applyDownloadFilters);
+    document.getElementById('downloadForm')?.addEventListener('submit', saveDownload);
+    document.getElementById('cancelDownloadBtn')?.addEventListener('click', closeDownloadDialog);
+    document.getElementById('closeDownloadDialogBtn')?.addEventListener('click', closeDownloadDialog);
+    dialog?.addEventListener('click', (event) => {
+        if (event.target === dialog) closeDownloadDialog();
+    });
+    document.getElementById('downloadFile')?.addEventListener('change', (event) => {
+        const file = event.target.files?.[0];
+        const filename = document.getElementById('downloadFilename');
+
+        if (file && filename && !filename.value.trim()) filename.value = file.name;
+        updateDownloadFileStatus(file?.name || '');
+    });
+    document.getElementById('downloadKey')?.addEventListener('input', updateDownloadLinkPreview);
+    document.getElementById('downloadsTableBody')?.addEventListener('click', (event) => {
+        const button = event.target?.closest?.('[data-download-action]');
+        if (!button) return;
+
+        const id = Number.parseInt(button.dataset.downloadId || '0', 10);
+        if (!id) return;
+
+        if (button.dataset.downloadAction === 'edit') editDownload(id);
+        if (button.dataset.downloadAction === 'delete') deleteDownload(id);
+    });
+}
+
+async function refreshDownloads() {
+    const tbody = document.getElementById('downloadsTableBody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">Loading downloads...</td></tr>';
+
+    try {
+        const data = await fetchAdminJson('/admin/api/downloads.php');
+        downloadManagerState.downloads = Array.isArray(data.downloads) ? data.downloads : [];
+        downloadManagerState.metrics = data.metrics || {};
+        updateDownloadMetrics();
+        applyDownloadFilters();
+    } catch (error) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">Unable to load downloads.</td></tr>';
+        showDownloadAlert(error.message || 'Unable to load downloads.', 'error');
+    }
+}
+
+function updateDownloadMetrics() {
+    const metrics = downloadManagerState.metrics;
+    const available = document.getElementById('downloadAvailableCount');
+    const total = document.getElementById('downloadTotalCount');
+    const records = document.getElementById('downloadRecordCount');
+
+    if (available) available.textContent = Number(metrics.available || 0).toLocaleString();
+    if (total) total.textContent = Number(metrics.total_downloads || 0).toLocaleString();
+    if (records) records.textContent = Number(metrics.records || 0).toLocaleString();
+}
+
+function applyDownloadFilters() {
+    const search = String(document.getElementById('downloadSearchInput')?.value || '').trim().toLowerCase();
+    const visibility = document.getElementById('downloadVisibilityFilter')?.value || 'all';
+
+    downloadManagerState.filteredDownloads = downloadManagerState.downloads.filter((download) => {
+        const matchesSearch = !search || [download.title, download.description, download.filename, download.link]
+            .join(' ').toLowerCase().includes(search);
+        const isVisible = Number(download.viewable) === 1;
+        const matchesVisibility = visibility === 'all'
+            || (visibility === 'visible' && isVisible)
+            || (visibility === 'hidden' && !isVisible);
+        return matchesSearch && matchesVisibility;
+    });
+
+    renderDownloads();
+}
+
+function renderDownloads() {
+    const tbody = document.getElementById('downloadsTableBody');
+    if (!tbody) return;
+
+    if (downloadManagerState.filteredDownloads.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">No downloads found.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = downloadManagerState.filteredDownloads.map((download) => {
+        const viewable = Number(download.viewable) === 1;
+        const fileExists = Boolean(download.file_exists);
+        const status = viewable && fileExists
+            ? '<span class="status-badge active">Viewable</span>'
+            : viewable
+                ? '<span class="status-badge danger">File missing</span>'
+                : '<span class="status-badge muted">Hidden</span>';
+
+        return `<tr>
+            <td><strong>${adminEscapeHtml(download.title)}</strong></td>
+            <td class="download-description-cell">${adminEscapeHtml(download.description)}</td>
+            <td>${adminEscapeHtml(download.filename)}${fileExists ? '' : '<br><small>Not in storage</small>'}</td>
+            <td>${status}</td>
+            <td class="download-link-cell"><a href="${adminEscapeHtml(download.link)}" target="_blank" rel="noopener">${adminEscapeHtml(download.link)}</a></td>
+            <td>${Number(download.download_count || 0).toLocaleString()}</td>
+            <td><div class="product-actions">
+                <button type="button" class="table-action" data-download-action="edit" data-download-id="${adminEscapeHtml(download.id)}">Edit</button>
+                <button type="button" class="table-action danger" data-download-action="delete" data-download-id="${adminEscapeHtml(download.id)}">Delete</button>
+            </div></td>
+        </tr>`;
+    }).join('');
+}
+
+function createDownloadKey() {
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function openDownloadForm(download = null) {
+    const form = document.getElementById('downloadForm');
+    const dialog = document.getElementById('downloadFormDialog');
+    if (!form || !dialog) return;
+
+    form.reset();
+    const isEditing = Boolean(download);
+    document.getElementById('downloadFormTitle').textContent = isEditing ? 'Edit Download' : 'Add Download';
+    document.getElementById('downloadId').value = download?.id || '';
+    document.getElementById('downloadTitle').value = download?.title || '';
+    document.getElementById('downloadDescription').value = download?.description || '';
+    document.getElementById('downloadFilename').value = download?.filename || '';
+    document.getElementById('downloadKey').value = download?.download_key || createDownloadKey();
+    document.getElementById('downloadCount').value = download?.download_count || 0;
+    document.getElementById('downloadViewable').checked = isEditing ? Number(download.viewable) === 1 : true;
+    document.getElementById('downloadFile').required = !isEditing;
+    document.getElementById('downloadFileHelp').textContent = isEditing
+        ? 'Leave blank to keep the current file. Maximum 25 MB.'
+        : 'Required for a new download. Maximum 25 MB.';
+
+    updateDownloadFileStatus(isEditing ? download.filename : '', isEditing ? Boolean(download.file_exists) : false);
+    updateDownloadLinkPreview();
+
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+    document.getElementById('downloadTitle')?.focus();
+}
+
+function updateDownloadFileStatus(filename = '', exists = true) {
+    const status = document.getElementById('downloadFileStatus');
+    if (!status) return;
+    status.textContent = filename
+        ? (exists ? `Current file: ${filename}` : `Selected file: ${filename}`)
+        : 'No file uploaded yet.';
+}
+
+function updateDownloadLinkPreview() {
+    const preview = document.getElementById('downloadLinkPreview');
+    const key = String(document.getElementById('downloadKey')?.value || '').trim();
+    if (!preview) return;
+
+    if (!key) {
+        preview.textContent = 'Generated after save';
+        preview.removeAttribute('href');
+        return;
+    }
+
+    const link = `/customer/download.php?key=${encodeURIComponent(key)}`;
+    preview.href = link;
+    preview.textContent = link;
+}
+
+function closeDownloadDialog() {
+    const dialog = document.getElementById('downloadFormDialog');
+    if (!dialog) return;
+    if (typeof dialog.close === 'function') dialog.close();
+    else dialog.removeAttribute('open');
+}
+
+function editDownload(id) {
+    const download = downloadManagerState.downloads.find((item) => Number(item.id) === Number(id));
+    if (!download) {
+        showDownloadAlert('Download not found.', 'error');
+        return;
+    }
+    openDownloadForm(download);
+}
+
+async function deleteDownload(id) {
+    const download = downloadManagerState.downloads.find((item) => Number(item.id) === Number(id));
+    if (!confirm(`Hide “${download?.title || 'this download'}”? The stored file will be preserved.`)) return;
+
+    const formData = new FormData();
+    formData.set('action', 'delete');
+    formData.set('id', String(id));
+
+    try {
+        const data = await fetchAdminJson('/admin/api/downloads.php', { method: 'POST', body: formData });
+        showDownloadAlert(data.message || 'Download hidden.');
+        await refreshDownloads();
+    } catch (error) {
+        showDownloadAlert(error.message || 'Unable to hide download.', 'error');
+    }
+}
+
+async function saveDownload(event) {
+    event.preventDefault();
+    const button = document.getElementById('saveDownloadBtn');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Saving...';
+    }
+
+    try {
+        const data = await fetchAdminJson('/admin/api/downloads.php', {
+            method: 'POST',
+            body: new FormData(event.target)
+        });
+        closeDownloadDialog();
+        showDownloadAlert(data.message || 'Download saved.');
+        await refreshDownloads();
+    } catch (error) {
+        showDownloadAlert(error.message || 'Unable to save download.', 'error');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Save Download';
+        }
+    }
+}
+
+function showDownloadAlert(message, type = 'success') {
+    const alert = document.getElementById('downloadAlert');
+    if (!alert) return;
+    alert.textContent = message;
+    alert.dataset.type = type;
+    alert.hidden = false;
+}
+
+// =====================================
 // Task Manager
 // =====================================
 
@@ -5121,3 +5387,219 @@ async function newsSubmitForm(event, action) {
 function newsUpdateNewsletterPreview(){const select=document.querySelector('#newsNewsletterArticlesForm select[name="newsletter_id"]'),link=document.getElementById('newsNewsletterPreview');if(link)link.href=select?.value?`/admin/newsletter-preview.php?id=${encodeURIComponent(select.value)}`:'#';}
 async function newsBulkSubmit(event){event.preventDefault();const ids=Array.from(document.querySelectorAll('[data-news-select]:checked'),input=>input.dataset.newsSelect);if(!ids.length){newsAdminAlert('Select at least one article.',true);return;}try{await newsAdminRequest('bulk_articles',{method:'POST',data:{article_ids:ids,status:event.currentTarget.elements.status.value}});newsAdminAlert(`${ids.length} articles updated.`);await newsLoadArticles();await newsLoadDashboard();}catch(error){newsAdminAlert(error.message,true);}}
 async function newsImageSubmit(event){event.preventDefault();const form=event.currentTarget,data=new FormData(form),button=event.submitter;button.disabled=true;try{const response=await fetch('/admin/api/news/upload-image.php',{method:'POST',headers:{'X-CSRF-Token':newsAdminState.csrf},body:data}),payload=await response.json();if(!response.ok||!payload.success)throw new Error(payload.message||'Upload failed.');newsAdminAlert(`Image uploaded at ${payload.image.path}; approve it during article review.`);form.reset();}catch(error){newsAdminAlert(error.message,true);}finally{button.disabled=false;}}
+
+// =========================================
+// EMAIL TOOLS
+// =========================================
+
+let emailToolsState = { csrf: '', newsletters: [], newsletter_templates: [], campaigns: [], leads: [], templates: [], signatures: [], metrics: {} };
+
+async function initEmailTools() {
+    const app = document.getElementById('emailToolsApp');
+    if (!app) return;
+    app.querySelectorAll('[data-email-tab]').forEach(button => button.addEventListener('click', () => {
+        app.querySelectorAll('[data-email-tab]').forEach(item => item.classList.toggle('is-active', item === button));
+        app.querySelectorAll('[data-email-panel]').forEach(panel => panel.hidden = panel.dataset.emailPanel !== button.dataset.emailTab);
+    }));
+    app.querySelectorAll('[data-editor-command]').forEach(button => button.addEventListener('click', () => {
+        document.execCommand(button.dataset.editorCommand, false, button.dataset.editorValue || null);
+        document.getElementById('emailNewsletterEditor')?.focus();
+    }));
+    app.querySelector('[data-editor-link]')?.addEventListener('click', () => {
+        const url = window.prompt('Enter an https:// link:');
+        if (url && /^https:\/\//i.test(url)) document.execCommand('createLink', false, url);
+    });
+    document.getElementById('emailNewsletterTemplateForm')?.addEventListener('submit', event => {
+        event.currentTarget.elements.html_body.value = document.getElementById('emailNewsletterEditor')?.innerHTML || '';
+        emailToolsSubmit(event, 'save_newsletter_template');
+    });
+    document.getElementById('emailNewsletterTemplateCancelButton')?.addEventListener('click', emailNewsletterTemplateResetForm);
+    document.getElementById('emailNewsletterTemplateRows')?.addEventListener('click', async event => {
+        const editButton = event.target.closest('[data-edit-newsletter-template]');
+        if (editButton) {
+            emailNewsletterTemplateEdit(Number(editButton.dataset.editNewsletterTemplate));
+            return;
+        }
+        const deleteButton = event.target.closest('[data-delete-newsletter-template]');
+        if (deleteButton && window.confirm('Delete this newsletter template? This cannot be undone.')) {
+            await emailToolsAction('delete_newsletter_template', { id: deleteButton.dataset.deleteNewsletterTemplate }, deleteButton);
+            if (String(document.getElementById('emailNewsletterTemplateForm')?.elements.id.value) === String(deleteButton.dataset.deleteNewsletterTemplate)) emailNewsletterTemplateResetForm();
+        }
+    });
+    document.getElementById('emailNewsletterSendForm')?.addEventListener('submit', event => emailToolsSubmit(event, 'send_newsletter', 'Queue this newsletter for all eligible customer accounts?'));
+    document.getElementById('emailLeadImportForm')?.addEventListener('submit', event => emailToolsSubmit(event, 'import_leads'));
+    document.getElementById('emailSignatureForm')?.addEventListener('submit', event => emailToolsSubmit(event, 'save_signature'));
+    document.getElementById('emailTemplateForm')?.addEventListener('submit', event => emailToolsSubmit(event, 'save_template'));
+    document.getElementById('emailTemplateCancelButton')?.addEventListener('click', emailTemplateResetForm);
+    document.getElementById('emailSalesTemplateRows')?.addEventListener('click', async event => {
+        const editButton = event.target.closest('[data-edit-sales-template]');
+        if (editButton) {
+            emailTemplateEdit(Number(editButton.dataset.editSalesTemplate));
+            return;
+        }
+        const deleteButton = event.target.closest('[data-delete-sales-template]');
+        if (deleteButton && window.confirm('Delete this sales email template? This cannot be undone.')) {
+            await emailToolsAction('delete_template', { id: deleteButton.dataset.deleteSalesTemplate }, deleteButton);
+            if (String(document.getElementById('emailTemplateForm')?.elements.id.value) === String(deleteButton.dataset.deleteSalesTemplate)) emailTemplateResetForm();
+        }
+    });
+    document.getElementById('emailCampaignForm')?.addEventListener('submit', event => emailToolsSubmit(event, 'send_campaign', 'Queue this campaign for every eligible active lead?'));
+    document.getElementById('emailConfigForm')?.addEventListener('submit', emailConfigSubmit);
+    await emailToolsRefresh();
+}
+
+async function emailToolsRefresh() {
+    try {
+        const response = await fetch('/admin/api/email-tools.php?action=bootstrap', { cache: 'no-store', headers: { Accept: 'application/json' } });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || 'Unable to load Email Tools.');
+        emailToolsState = { ...emailToolsState, ...data, csrf: data.csrf_token };
+        emailToolsRender();
+    } catch (error) { emailToolsAlert(error.message || 'Unable to load Email Tools.', true); }
+}
+
+async function emailToolsSubmit(event, action, confirmation = '') {
+    event.preventDefault();
+    if (confirmation && !window.confirm(confirmation)) return;
+    const form = event.currentTarget, button = form.querySelector('button[type="submit"]'), original = button?.textContent;
+    let completed = false;
+    if (button) { button.disabled = true; button.textContent = 'Working…'; }
+    try {
+        const body = new FormData(form); body.set('action', action); body.set('csrf_token', emailToolsState.csrf);
+        const response = await fetch('/admin/api/email-tools.php', { method: 'POST', body, headers: { Accept: 'application/json' } });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || 'The request could not be completed.');
+        emailToolsAlert(data.message || 'Saved.'); form.reset();
+        if (action === 'save_newsletter_template') emailNewsletterTemplateResetForm();
+        if (action === 'save_template') emailTemplateResetForm();
+        completed = true;
+        await emailToolsRefresh();
+    } catch (error) { emailToolsAlert(error.message || 'The request could not be completed.', true); }
+    finally { if (button) { button.disabled = false; if (!completed || !['save_newsletter_template','save_template'].includes(action)) button.textContent = original; } }
+}
+
+async function emailToolsAction(action, values, button) {
+    const original = button?.textContent;
+    if (button) { button.disabled = true; button.textContent = 'Working…'; }
+    try {
+        const body = new FormData(); body.set('action', action); body.set('csrf_token', emailToolsState.csrf);
+        Object.entries(values).forEach(([key, value]) => body.set(key, value));
+        const response = await fetch('/admin/api/email-tools.php', { method: 'POST', body, headers: { Accept: 'application/json' } });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || 'The request could not be completed.');
+        emailToolsAlert(data.message || 'Queued.'); await emailToolsRefresh();
+    } catch (error) { emailToolsAlert(error.message || 'The request could not be completed.', true); }
+    finally { if (button) { button.disabled = false; button.textContent = original; } }
+}
+
+function emailToolsRender() {
+    const smtp = document.getElementById('emailToolsSmtp');
+    if (smtp) { smtp.textContent = emailToolsState.smtp_configured ? 'SMTP configured' : 'SMTP setup required'; smtp.classList.toggle('is-ready', Boolean(emailToolsState.smtp_configured)); }
+    const signatureOptions = emailToolsState.signatures.map(item => `<option value="${Number(item.id)}">${emailToolsEscape(item.signature_name)}${Number(item.is_default) ? ' (default)' : ''}</option>`).join('');
+    document.querySelectorAll('#emailToolsApp select[name="signature_id"]').forEach(select => select.innerHTML = `<option value="">No signature</option>${signatureOptions}`);
+    const templateOptions = emailToolsState.templates.map(item => `<option value="${Number(item.id)}">${emailToolsEscape(item.template_name)}</option>`).join('');
+    document.querySelectorAll('#emailToolsApp select[name="template_id"]').forEach(select => select.innerHTML = `<option value="">Choose a template</option>${templateOptions}`);
+    const newsletterTemplateOptions = emailToolsState.newsletter_templates.map(item => `<option value="${Number(item.id)}">${emailToolsEscape(item.template_name)}</option>`).join('');
+    document.querySelectorAll('#emailToolsApp select[name="newsletter_template_id"]').forEach(select => select.innerHTML = `<option value="">Choose a template</option>${newsletterTemplateOptions}`);
+    const newsletterTemplateRows = document.getElementById('emailNewsletterTemplateRows');
+    if (newsletterTemplateRows) newsletterTemplateRows.innerHTML = emailToolsState.newsletter_templates.length ? emailToolsState.newsletter_templates.map(item => `<tr><td><strong>${emailToolsEscape(item.template_name)}</strong></td><td>${emailToolsEscape(item.subject_template)}</td><td>${emailToolsDate(item.updated_at)}</td><td><div class="email-template-row-actions"><button type="button" class="btn-secondary btn-small" data-edit-newsletter-template="${Number(item.id)}">Edit</button><button type="button" class="btn-danger btn-small" data-delete-newsletter-template="${Number(item.id)}">Delete</button></div></td></tr>`).join('') : '<tr><td colspan="4">No newsletter templates have been saved.</td></tr>';
+    const newsletters = document.getElementById('emailNewsletterRows');
+    if (newsletters) newsletters.innerHTML = emailToolsState.newsletters.length ? emailToolsState.newsletters.map(item => `<tr><td><strong>${emailToolsEscape(item.newsletter_name)}</strong><small>${emailToolsEscape(item.subject)}</small></td><td>${emailToolsEscape(item.template_name || 'Legacy template')}</td><td><span class="email-status email-status-${emailToolsEscape(item.status)}">${emailToolsEscape(item.status)}</span></td><td>${Number(item.recipient_count || 0)}</td><td>${Number(item.sent_count || 0)}</td><td>${Number(item.failed_count || 0)} / ${Number(item.skipped_count || 0)}</td></tr>`).join('') : '<tr><td colspan="6">No newsletters have been sent.</td></tr>';
+    const campaigns = document.getElementById('emailCampaignRows');
+    if (campaigns) campaigns.innerHTML = emailToolsState.campaigns.length ? emailToolsState.campaigns.map(item => `<tr><td><strong>${emailToolsEscape(item.campaign_name)}</strong><small>${emailToolsDate(item.queued_at)}</small></td><td>${emailToolsEscape(item.template_name)}</td><td><span class="email-status email-status-${emailToolsEscape(item.status)}">${emailToolsEscape(item.status)}</span></td><td>${Number(item.recipient_count || 0)}</td><td>${Number(item.sent_count || 0)}</td><td>${Number(item.failed_count || 0)} / ${Number(item.skipped_count || 0)}</td></tr>`).join('') : '<tr><td colspan="6">No campaigns have been sent.</td></tr>';
+    const leads = document.getElementById('emailLeadRows');
+    if (leads) leads.innerHTML = emailToolsState.leads.length ? emailToolsState.leads.map(item => `<tr><td><strong>${emailToolsEscape(`${item.first_name || ''} ${item.last_name || ''}`.trim())}</strong><small>${emailToolsEscape(item.email_address)}</small></td><td>${emailToolsEscape(item.company || '—')}</td><td>${emailToolsEscape(item.status)}</td><td>${Number(item.total_emails_sent || 0)}</td><td>${emailToolsDate(item.last_contacted_at)}</td></tr>`).join('') : '<tr><td colspan="5">No leads have been imported.</td></tr>';
+    const salesTemplates = document.getElementById('emailSalesTemplateRows');
+    if (salesTemplates) salesTemplates.innerHTML = emailToolsState.templates.length ? emailToolsState.templates.map(item => {
+        const preview = String(item.body_template || '').replace(/\s+/g, ' ').trim();
+        return `<tr><td><strong>${emailToolsEscape(item.template_name)}</strong></td><td>${emailToolsEscape(item.subject_template)}</td><td>${emailToolsEscape(preview.length > 110 ? `${preview.slice(0,110)}…` : preview)}</td><td>${emailToolsEscape(item.signature_name || 'None')}</td><td>${emailToolsDate(item.updated_at)}</td><td><div class="email-template-row-actions"><button type="button" class="btn-secondary btn-small" data-edit-sales-template="${Number(item.id)}">Edit</button><button type="button" class="btn-danger btn-small" data-delete-sales-template="${Number(item.id)}">Delete</button></div></td></tr>`;
+    }).join('') : '<tr><td colspan="6">No sales email templates have been saved.</td></tr>';
+    const metrics = document.getElementById('emailSalesMetrics');
+    if (metrics) metrics.innerHTML = [['Leads',emailToolsState.metrics.lead_count],['Active leads',emailToolsState.metrics.active_lead_count],['Completed campaigns',emailToolsState.metrics.completed_campaign_count],['Sales emails sent',emailToolsState.metrics.sales_sent_count],['Suppressed addresses',emailToolsState.metrics.suppression_count]].map(([label,value]) => `<div><strong>${Number(value || 0)}</strong><span>${label}</span></div>`).join('');
+    const summary = document.getElementById('emailNewsletterSummary');
+    if (summary) { const sent=emailToolsState.newsletters.reduce((sum,item)=>sum+Number(item.sent_count||0),0),active=emailToolsState.newsletters.filter(item=>['queued','sending'].includes(item.status)).length; summary.innerHTML=`<div><dt>Active queues</dt><dd>${active}</dd></div><div><dt>Total delivered</dt><dd>${sent}</dd></div><div><dt>Batch interval</dt><dd>5 minutes</dd></div>`; }
+    emailConfigRender();
+}
+
+function emailToolsAlert(message, isError = false) { const alert=document.getElementById('emailToolsAlert'); if(!alert)return; alert.textContent=message; alert.classList.toggle('is-error',isError); alert.classList.toggle('is-success',!isError); alert.hidden=false; alert.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+function emailToolsEscape(value) { const node=document.createElement('div'); node.textContent=String(value??''); return node.innerHTML; }
+function emailToolsDate(value) { if(!value)return '—'; const date=new Date(String(value).replace(' ','T')); return Number.isNaN(date.getTime())?emailToolsEscape(value):emailToolsEscape(date.toLocaleString()); }
+
+function emailNewsletterTemplateEdit(id) {
+    const template=emailToolsState.newsletter_templates.find(item=>Number(item.id)===Number(id)),form=document.getElementById('emailNewsletterTemplateForm');
+    if(!template||!form){emailToolsAlert('The newsletter template could not be found.',true);return;}
+    form.elements.id.value=template.id;
+    form.elements.template_name.value=template.template_name||'';
+    form.elements.subject.value=template.subject_template||'';
+    document.getElementById('emailNewsletterEditor').innerHTML=template.html_body||'';
+    form.elements.html_body.value=template.html_body||'';
+    document.getElementById('emailNewsletterTemplateFormTitle').textContent='Edit newsletter template';
+    document.getElementById('emailNewsletterTemplateSaveButton').textContent='Update Newsletter Template';
+    document.getElementById('emailNewsletterTemplateCancelButton').hidden=false;
+    form.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function emailNewsletterTemplateResetForm() {
+    const form=document.getElementById('emailNewsletterTemplateForm');if(!form)return;
+    form.reset();form.elements.id.value='';form.elements.html_body.value='';
+    document.getElementById('emailNewsletterEditor').innerHTML='<p>Hello {FirstName},</p><p>Write your newsletter here.</p>';
+    document.getElementById('emailNewsletterTemplateFormTitle').textContent='Create newsletter template';
+    document.getElementById('emailNewsletterTemplateSaveButton').textContent='Save Newsletter Template';
+    document.getElementById('emailNewsletterTemplateCancelButton').hidden=true;
+}
+
+function emailTemplateEdit(id) {
+    const template=emailToolsState.templates.find(item=>Number(item.id)===Number(id)),form=document.getElementById('emailTemplateForm');
+    if(!template||!form){emailToolsAlert('The sales template could not be found.',true);return;}
+    form.elements.id.value=template.id;
+    form.elements.template_name.value=template.template_name||'';
+    form.elements.subject_template.value=template.subject_template||'';
+    form.elements.body_template.value=template.body_template||'';
+    form.elements.signature_id.value=template.signature_id||'';
+    document.getElementById('emailTemplateFormTitle').textContent='Edit outreach template';
+    document.getElementById('emailTemplateSaveButton').textContent='Update Template';
+    document.getElementById('emailTemplateCancelButton').hidden=false;
+    form.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function emailTemplateResetForm() {
+    const form=document.getElementById('emailTemplateForm');if(!form)return;
+    form.reset();form.elements.id.value='';
+    document.getElementById('emailTemplateFormTitle').textContent='Outreach template';
+    document.getElementById('emailTemplateSaveButton').textContent='Save Template';
+    document.getElementById('emailTemplateCancelButton').hidden=true;
+}
+
+function emailConfigRender() {
+    const form = document.getElementById('emailConfigForm');
+    if (!form) return;
+    Object.entries(emailToolsState.email_configuration || {}).forEach(([key, value]) => {
+        const input = form.elements.namedItem(key);
+        if (input && !key.endsWith('_configured') && key !== 'source') input.value = value ?? '';
+    });
+    const status = document.getElementById('emailConfigStatus');
+    status.textContent = emailToolsState.smtp_configured ? 'Both accounts ready' : 'Configuration incomplete';
+    status.classList.toggle('is-ready', Boolean(emailToolsState.smtp_configured));
+    const keyReady = emailToolsState.email_configuration?.encryption_key_configured;
+    for (const profile of ['newsletter','sales']) {
+        const configured = emailToolsState.email_configuration?.[`${profile}_password_configured`];
+        const help = document.getElementById(`${profile}PasswordHelp`);
+        if (help) help.textContent = `${configured ? 'A password is saved. Leave this field blank to keep it.' : 'No password is currently saved.'} ${keyReady ? 'Password encryption is ready.' : 'A protected encryption key will be created when you save.'}`;
+    }
+}
+
+async function emailConfigSubmit(event) {
+    event.preventDefault();
+    const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),original=button.textContent;
+    button.disabled=true;button.textContent='Saving…';
+    try {
+        const body=new FormData(form);body.set('action','save_email_configuration');body.set('csrf_token',emailToolsState.csrf);
+        const response=await fetch('/admin/api/email-tools.php',{method:'POST',body,headers:{Accept:'application/json'}}),data=await response.json();
+        if(!response.ok||!data.success)throw new Error(data.message||'Unable to save email configuration.');
+        form.elements.newsletter_smtp_password.value='';form.elements.sales_smtp_password.value='';
+        emailConfigAlert(data.message||'Email configuration saved.');await emailToolsRefresh();
+    } catch(error) { emailConfigAlert(error.message||'Unable to save email configuration.',true); }
+    finally { button.disabled=false;button.textContent=original; }
+}
+
+function emailConfigAlert(message, isError = false) { const alert=document.getElementById('emailConfigAlert'); if(!alert)return; alert.textContent=message; alert.classList.toggle('is-error',isError); alert.classList.toggle('is-success',!isError); alert.hidden=false; }

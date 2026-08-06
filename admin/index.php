@@ -83,6 +83,8 @@ if ($adminJsVersion === '') {
                 <li><a href="#" onclick="loadPage('travelcontent')">Travel Content</a></li>
                 <li><a href="#" onclick="loadPage('blogposts')">Blog Editor</a></li>
                 <li><a href="#" onclick="loadPage('news')">News Aggregator</a></li>
+                <li><a href="#" onclick="loadPage('emailtools')">Email Tools</a></li>
+                <li><a href="#" onclick="loadPage('downloads')">Downloads</a></li>
                 <li><a href="#" onclick="loadPage('apis')">Scrapers/API</a></li>
                 <li><a href="#" onclick="loadPage('reports')">Reports</a></li>
                 <li><a href="#" onclick="loadPage('settings')">Site Settings</a></li>

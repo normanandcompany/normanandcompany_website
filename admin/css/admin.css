@@ -1791,6 +1791,65 @@ tbody tr:nth-child(even) {
 }
 
 /* =========================================
+   DOWNLOAD MANAGER
+========================================= */
+
+.download-toolbar {
+    grid-template-columns: minmax(260px, 1fr) minmax(180px, 260px) auto;
+}
+
+.download-table {
+    min-width: 1250px;
+}
+
+.download-description-cell {
+    min-width: 260px;
+    max-width: 380px;
+    white-space: pre-wrap;
+}
+
+.download-link-cell {
+    min-width: 280px;
+    max-width: 360px;
+    overflow-wrap: anywhere;
+}
+
+.download-link-cell a {
+    color: var(--primary);
+}
+
+.download-link-preview {
+    display: grid;
+    gap: 0.45rem;
+    padding: 1rem;
+    border: 1px solid rgba(22, 58, 99, 0.12);
+    border-radius: 8px;
+    background: #fbfdfe;
+}
+
+.download-link-preview span {
+    color: var(--primary-accent);
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+
+.download-link-preview a {
+    color: var(--primary);
+    overflow-wrap: anywhere;
+}
+
+.download-file-status {
+    margin: 0;
+    padding: 0.8rem;
+    border-radius: 8px;
+    background: rgba(22, 135, 201, 0.08);
+    color: var(--primary-accent);
+    font-size: 0.86rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+/* =========================================
    BLOG MANAGER
 ========================================= */
 
@@ -2512,3 +2571,41 @@ tbody tr:nth-child(even) {
 }
 /* News aggregator */
 .news-admin{padding:1.5rem;max-width:1500px}.news-admin-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}.news-admin-tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin:1.5rem 0;border-bottom:1px solid #d8e2ea}.news-admin-tabs button{border:0;background:transparent;padding:.8rem 1rem;font-weight:700;cursor:pointer}.news-admin-tabs button.is-active{color:#1687c9;border-bottom:3px solid #1687c9}.news-admin-metrics{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:1rem}.news-admin-metrics>div{display:grid;gap:.25rem;background:#fff;border:1px solid #dae4eb;border-radius:8px;padding:1rem}.news-admin-metrics strong{font-size:1.8rem}.news-admin-metrics span{color:#536778}.news-admin-actions{display:flex;gap:.75rem;margin-bottom:1rem}.news-admin-form{display:flex;align-items:end;gap:1rem;flex-wrap:wrap;background:#fff;border:1px solid #dce5eb;border-radius:8px;padding:1rem;margin-bottom:1rem}.news-admin-form label{display:grid;gap:.35rem}.news-admin-chip-list{display:flex;flex-wrap:wrap;gap:.5rem}.news-admin-chip-list span{background:#eaf6f4;border-radius:99px;padding:.5rem .8rem}.news-admin-chip-list small{color:#52677e}.news-review-dialog{width:min(900px,94vw)}.news-review-dialog textarea{min-height:100px}.news-review-dialog fieldset{border:1px solid #d8e2ea;border-radius:8px;padding:1rem}.product-table td small{display:block;color:#657785;margin-top:.25rem}@media(max-width:1000px){.news-admin-metrics{grid-template-columns:repeat(3,1fr)}}@media(max-width:600px){.news-admin-metrics{grid-template-columns:1fr 1fr}.news-admin-header{display:block}}
+
+/* Email tools */
+.email-tools{padding:1.5rem;max-width:1500px;display:grid;gap:1.25rem}.email-tools-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}.email-tools-header h1{margin-bottom:.35rem}.email-tools-status{border-radius:999px;background:#fff1d6;color:#79520c;padding:.55rem .8rem;font-size:.78rem;font-weight:800}.email-tools-status.is-ready{background:#e5f7ee;color:#17643c}.email-tools-tabs{display:flex;gap:.5rem;border-bottom:1px solid #d8e2ea}.email-tools-tabs button{border:0;background:transparent;padding:.85rem 1rem;font-weight:750;color:#536778;cursor:pointer}.email-tools-tabs button.is-active{color:var(--primary);border-bottom:3px solid var(--primary)}.email-tools [data-email-panel]{display:grid;gap:1.25rem}.email-tools [data-email-panel][hidden]{display:none!important}.email-tools-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:1.25rem;align-items:start}.email-tools-grid-three{grid-template-columns:repeat(3,minmax(0,1fr))}.email-tools-card{display:grid;gap:1rem;background:#fff;border:1px solid #dce5eb;border-radius:10px;padding:1.25rem;box-shadow:0 8px 24px rgba(22,58,99,.05)}.email-tools-card h2{margin:0;color:var(--primary-accent)}.email-tools-card label{display:grid;gap:.4rem;font-weight:700}.email-tools-card input,.email-tools-card select,.email-tools-card textarea{width:100%;border:1px solid #cbd8e1;border-radius:6px;padding:.7rem;background:#fff;color:var(--text);font:inherit}.email-tools-check{display:flex!important;grid-template-columns:auto 1fr;align-items:center}.email-tools-check input{width:auto}.email-tools-help{margin:0;color:#637787;font-size:.88rem;line-height:1.5}.email-editor-toolbar{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:-1rem}.email-editor-toolbar button{border:1px solid #cbd8e1;border-radius:5px;background:#f8fafc;padding:.4rem .65rem;cursor:pointer}.email-html-editor{min-height:280px;border:1px solid #cbd8e1;border-radius:6px;padding:1rem;background:#fff;overflow:auto}.email-html-editor:focus{outline:2px solid rgba(22,135,201,.28);border-color:var(--primary)}.email-tools-send-form{display:grid;gap:1rem}.email-tools-summary{display:grid;gap:.8rem;margin:0}.email-tools-summary div{display:flex;justify-content:space-between;border-bottom:1px solid #e5edf2;padding-bottom:.7rem}.email-tools-summary dt{color:#637787}.email-tools-summary dd{margin:0;font-weight:800}.email-tools-metrics{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:1rem}.email-tools-metrics>div{display:grid;gap:.25rem;background:#fff;border:1px solid #dce5eb;border-radius:8px;padding:1rem}.email-tools-metrics strong{font-size:1.65rem;color:var(--primary-accent)}.email-tools-metrics span{color:#637787}.email-campaign-form{display:grid;grid-template-columns:2fr 2fr auto;gap:1rem;align-items:end}.email-tools-table-card{min-width:0}.email-status{display:inline-block;border-radius:999px;background:#edf2f5;padding:.3rem .55rem;font-size:.75rem;font-weight:800;text-transform:capitalize}.email-status-sending,.email-status-queued{background:#e5f2fb;color:#14628f}.email-status-completed{background:#e5f7ee;color:#17643c}.email-status-failed,.email-status-cancelled{background:#fae8e8;color:#8d2828}.btn-small{padding:.5rem .7rem;font-size:.8rem}.email-config-form{max-width:1200px}.email-config-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}.email-config-section{border:1px solid #dce5eb;border-radius:8px;padding:1rem}.email-config-section legend{padding:0 .45rem;color:var(--primary-accent);font-weight:800}.email-config-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}@media(max-width:1100px){.email-tools-grid-three,.email-config-grid{grid-template-columns:1fr}.email-tools-metrics{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){.email-tools-header,.email-tools-grid,.email-campaign-form,.email-config-heading{display:grid;grid-template-columns:1fr}.email-tools-metrics{grid-template-columns:1fr 1fr}.email-tools-tabs{overflow-x:auto}.email-tools-tabs button{white-space:nowrap}}
+
+/* Flatten the global admin section cards around Email Tools tab content. */
+main section.email-tools,
+.email-tools > section[data-email-panel] {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.email-template-form-actions,
+.email-template-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.email-template-form-actions [hidden] {
+    display: none !important;
+}
+
+.btn-danger {
+    border: 1px solid #b83a3a;
+    border-radius: 6px;
+    background: #fff;
+    color: #9f2929;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.btn-danger:hover {
+    background: #fae8e8;
+}

@@ -26,22 +26,22 @@
         <div>
             <h3>Resources</h3>
             <ul>
-                <li><a href="#" onclick="loadPage('cruiselines')">Cruiselines</a></li>
-                <li><a href="#" onclick="loadPage('resorts')">Resorts</a></li>
-                <li><a href="#" onclick="loadPage('destinations')">Destinations</a></li>
-                <li><a href="#" onclick="loadPage('travelessentials')">Travel Essentials</a></li>
-                <li><a href="#" onclick="loadPage('traveladvice')">Travel Advice</a></li>
-                <li><a href="#" onclick="loadPage('blog')">Travel Blog</a></li>
+                <li><a href="/?page=cruiselines" onclick="return navigateSitePage(event, 'cruiselines')">Cruiselines</a></li>
+                <li><a href="/?page=resorts" onclick="return navigateSitePage(event, 'resorts')">Resorts</a></li>
+                <li><a href="/?page=destinations" onclick="return navigateSitePage(event, 'destinations')">Destinations</a></li>
+                <li><a href="/?page=travelessentials" onclick="return navigateSitePage(event, 'travelessentials')">Travel Essentials</a></li>
+                <li><a href="/?page=traveladvice" onclick="return navigateSitePage(event, 'traveladvice')">Travel Advice</a></li>
+                <li><a href="/?page=blog" onclick="return navigateSitePage(event, 'blog')">Travel Blog</a></li>
             </ul>
         </div>
 
         <div>
             <h3>About</h3>
             <ul>
-                <li><a href="#" onclick="loadPage('about')">About Us</a></li>
-                <li><a href="#" onclick="loadPage('faq')">FAQ</a></li>
-                <li><a href="#" onclick="loadPage('privacy')">Privacy</a></li>
-                <li><a href="#" onclick="loadPage('contact')">Contact Us</a></li>
+                <li><a href="/?page=about" onclick="return navigateSitePage(event, 'about')">About Us</a></li>
+                <li><a href="/?page=faq" onclick="return navigateSitePage(event, 'faq')">FAQ</a></li>
+                <li><a href="/?page=privacy" onclick="return navigateSitePage(event, 'privacy')">Privacy</a></li>
+                <li><a href="/?page=contact" onclick="return navigateSitePage(event, 'contact')">Contact Us</a></li>
             </ul>
             
             <!-- SOCIAL MEDIA ICONS -->
@@ -94,7 +94,9 @@ function loadProductCategory(event, categoryId) {
         fallbackUrl.searchParams.set('category', normalizedCategory);
     }
 
-    if (typeof loadPage !== 'function' || window.location.pathname.startsWith('/admin')) {
+    if (typeof loadPage !== 'function'
+        || window.location.pathname.startsWith('/admin')
+        || (typeof isDynamicSiteShell === 'function' && !isDynamicSiteShell())) {
         window.location.href = fallbackUrl.toString();
         return;
     }

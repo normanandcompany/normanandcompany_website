@@ -2,6 +2,35 @@
 // DYNAMIC PAGE LOADER UX
 // =========================================
 
+function isDynamicSiteShell() {
+    const normalizedPath = window.location.pathname.replace(/\/+$/, '') || '/';
+
+    return normalizedPath === '/'
+        || normalizedPath === '/index.php'
+        || normalizedPath === '/customer'
+        || normalizedPath === '/customer/index.php';
+}
+
+function navigateSitePage(event, pageName) {
+    if (event) {
+        event.preventDefault();
+    }
+
+    if (isDynamicSiteShell()) {
+        loadPage(pageName);
+        return false;
+    }
+
+    const destination = new URL(isCustomerArea() ? '/customer/' : '/', window.location.origin);
+
+    if (pageName !== 'home') {
+        destination.searchParams.set('page', pageName);
+    }
+
+    window.location.href = destination.toString();
+    return false;
+}
+
 async function loadPage(pageName, options = {}) {
     options = options || {};
 
@@ -190,16 +219,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (content && !isStandalonePage) {
         const urlParams = new URLSearchParams(window.location.search);
-        const requestedCustomerPage = isCustomerArea() ? urlParams.get('page') : '';
+        const requestedPage = /^[a-z0-9]+$/i.test(urlParams.get('page') || '')
+            ? urlParams.get('page')
+            : '';
 
-        if (requestedCustomerPage === 'shipreview') {
+        if (isCustomerArea() && requestedPage === 'shipreview') {
             loadPage('shipreview', {
                 shipId: urlParams.get('ship_id')
             });
-        } else if (requestedCustomerPage === 'resortreview') {
+        } else if (isCustomerArea() && requestedPage === 'resortreview') {
             loadPage('resortreview', {
                 resortId: urlParams.get('resort_id')
             });
+        } else if (requestedPage) {
+            loadPage(requestedPage);
         } else {
             loadPage('home');
         }
@@ -3728,7 +3761,7 @@ async function loadNewsPreferencePreview(typeSelect,selectionSelect){
 }
 async function refreshNewsPreferences(){const boot=await customerNewsRequest('bootstrap');customerNewsState.csrf=boot.csrf_token;customerNewsState.bootstrap=boot;renderNewsPreferences();}
 function renderNewsPreferences(){const b=customerNewsState.bootstrap,names=new Map([...b.entities.map(x=>[String(x.id),x.entity_name]),...b.categories.map(x=>[String(x.id),x.category_name]),...b.keywords.map(x=>[String(x.id),x.keyword_name])]);document.getElementById('newsPreferenceList').innerHTML=b.preferences.length?b.preferences.map(p=>`<div class="customer-news-interest customer-profile__favorite"><div><strong>${customerNewsEscape(names.get(String(p.entity_id||p.category_id||p.keyword_id))||p.preference_value)}</strong><span>Priority ${p.priority_level}</span></div><button class="customer-profile__remove-favorite" type="button" data-remove-preference="${p.id}">Unfollow</button></div>`).join(''):'<p class="customer-profile__empty">You are not following any news interests yet.</p>';document.getElementById('newsAlertList').innerHTML=b.alerts.length?`<h3>Current digests</h3>${b.alerts.map(a=>`<p>${customerNewsEscape(a.alert_name)} — ${customerNewsEscape(a.frequency)}${Number(a.is_active)?'':' (disabled)'}</p>`).join('')}`:'';}
-function customerNewsCard(a,saved=false){return `<article class="customer-news-card"><div><span>${customerNewsEscape(a.category_name||a.news_type)}</span><h2><a href="/news.php?article=${encodeURIComponent(a.slug)}">${customerNewsEscape(a.headline)}</a></h2><p>${customerNewsEscape(a.summary)}</p><small>${customerNewsEscape(a.source_name||'Norman and Company')} · ${customerNewsEscape(a.source_published_at||a.published_at||'')}</small>${a.recommendation_reason?`<p class="recommendation-reason">${customerNewsEscape(a.recommendation_reason)}</p>`:''}</div><div class="customer-news-actions">${saved?`<textarea aria-label="Private note" data-news-note>${customerNewsEscape(a.notes||'')}</textarea><button data-news-unsave="${a.id}">Remove</button>`:`<button data-news-save="${a.id}">Save</button><button data-news-hide="${a.id}">Not relevant</button>`}</div></article>`;}
+function customerNewsCard(a,saved=false){return `<article class="customer-news-card"><div><span>${customerNewsEscape(a.category_name||a.news_type)}</span><h2><a href="/customer/news.php?article=${encodeURIComponent(a.slug)}">${customerNewsEscape(a.headline)}</a></h2><p>${customerNewsEscape(a.summary)}</p><small>${customerNewsEscape(a.source_name||'Norman and Company')} · ${customerNewsEscape(a.source_published_at||a.published_at||'')}</small>${a.recommendation_reason?`<p class="recommendation-reason">${customerNewsEscape(a.recommendation_reason)}</p>`:''}</div><div class="customer-news-actions">${saved?`<textarea aria-label="Private note" data-news-note>${customerNewsEscape(a.notes||'')}</textarea><button data-news-unsave="${a.id}">Remove</button>`:`<button data-news-save="${a.id}">Save</button><button data-news-hide="${a.id}">Not relevant</button>`}</div></article>`;}
 function bindCustomerNewsActions(target){if(target.dataset.newsActionsBound==='true')return;target.dataset.newsActionsBound='true';target.addEventListener('click',async e=>{const save=e.target.closest('[data-news-save]'),hide=e.target.closest('[data-news-hide]');try{if(save){await customerNewsRequest('save_article','POST',{article_id:save.dataset.newsSave});customerNewsMessage('Article saved.');}if(hide){await customerNewsRequest('hide_article','POST',{article_id:hide.dataset.newsHide,reason:'not_relevant'});hide.closest('article')?.remove();}}catch(error){customerNewsMessage(error.message,true);}});}
 async function loadMyNews(){const target=document.getElementById('customerNewsFeed');try{const data=await customerNewsRequest('feed');target.innerHTML=data.articles.length?data.articles.map(a=>customerNewsCard(a)).join(''):'<p>No recommendations are available yet. Follow interests in News Preferences.</p>';bindCustomerNewsActions(target);}catch(error){target.innerHTML=`<p>${customerNewsEscape(error.message)}</p>`;}}
 async function loadSavedNews(){const target=document.getElementById('customerSavedFeed'),sort=document.getElementById('savedNewsSort');const load=async()=>{try{const response=await fetch(`/customer/api/news.php?action=saved&sort=${encodeURIComponent(sort.value)}`),data=await response.json();if(!response.ok||!data.success)throw new Error(data.message);target.innerHTML=data.articles.length?data.articles.map(a=>customerNewsCard(a,true)).join(''):'<p>You have no saved news yet.</p>';}catch(error){target.innerHTML=`<p>${customerNewsEscape(error.message)}</p>`;}};sort.addEventListener('change',load);target.addEventListener('click',async e=>{const button=e.target.closest('[data-news-unsave]');if(!button)return;await customerNewsRequest('unsave_article','POST',{article_id:button.dataset.newsUnsave});button.closest('article').remove();});target.addEventListener('change',async e=>{const note=e.target.closest('[data-news-note]');if(!note)return;const id=note.closest('article').querySelector('[data-news-unsave]').dataset.newsUnsave;await customerNewsRequest('save_article','POST',{article_id:id,notes:note.value});});load();}

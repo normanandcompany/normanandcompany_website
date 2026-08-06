@@ -332,6 +332,77 @@ main a:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
+.downloads-page {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.downloads-intro {
+    max-width: 720px;
+    margin: -0.5rem 0 1.75rem;
+    color: rgba(27, 47, 79, 0.72);
+}
+
+.downloads-message {
+    padding: 1.25rem;
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.download-card {
+    position: relative;
+    display: flex;
+    min-height: 240px;
+    flex-direction: column;
+    align-items: flex-start;
+    color: inherit;
+    text-decoration: none;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.download-card:hover,
+.download-card:focus-visible {
+    color: inherit;
+    text-decoration: none;
+    box-shadow: 0 6px 18px rgba(22, 58, 99, 0.2);
+    transform: translateY(-2px);
+}
+
+.download-card:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 3px;
+}
+
+.download-card__type {
+    display: inline-flex;
+    margin-bottom: 1rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(22, 135, 201, 0.12);
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+.download-card h2 {
+    margin: 0 0 0.75rem;
+    color: var(--primary-accent);
+    font-size: 1.35rem;
+}
+
+.download-card p {
+    margin: 0 0 1.25rem;
+    line-height: 1.6;
+}
+
+.download-card__action {
+    margin-top: auto;
+    color: var(--primary);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
 .cruise-line-card {
     min-height: 170px;
     display: flex;
@@ -3342,3 +3413,6 @@ footer li {
 @media(max-width:850px){.news-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.news-filter{grid-template-columns:1fr 1fr}}@media(max-width:560px){.news-grid,.news-filter{grid-template-columns:1fr}.news-card-meta{flex-direction:column}}
 .customer-news{max-width:1100px;margin:0 auto;padding:clamp(1rem,3vw,3rem)}.customer-news form{display:flex;flex-wrap:wrap;gap:1rem;align-items:end;padding:1rem;background:#fff;border:1px solid #dce7e5;border-radius:10px;margin:1rem 0}.customer-news form label{display:grid;gap:.35rem}.customer-news input,.customer-news select,.customer-news textarea{min-height:42px;padding:.6rem;border:1px solid #9aadaa;border-radius:6px}.customer-news button{min-height:42px;border:0;border-radius:6px;padding:.65rem 1rem;background:#2A9D8F;color:#fff;font-weight:700}.customer-news-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.customer-news-card{display:flex;flex-direction:column;justify-content:space-between;background:#fff;border:1px solid #dce7e5;border-radius:12px;padding:1.2rem}.customer-news-card h2{font-size:1.25rem}.customer-news-actions{display:flex;gap:.5rem;align-items:end;margin-top:1rem}.customer-news-actions textarea{flex:1}.recommendation-reason{font-size:.88rem;color:#21867A;font-weight:700}.customer-news-interest{display:flex;justify-content:space-between;align-items:center;padding:.75rem;border-bottom:1px solid #dce7e5}@media(max-width:650px){.customer-news-grid{grid-template-columns:1fr}}
 .news-page.customer-profile{display:block}.news-profile-hero,.news-detail-hero{margin-bottom:1rem}.news-profile-actions{display:flex;gap:.75rem;flex-wrap:wrap;margin:0 0 1rem}.news-profile-actions a{text-decoration:none}.news-page .news-card.customer-profile__panel{padding:0}.news-page .news-detail.customer-profile__panel{padding:clamp(1.25rem,4vw,3rem)}.news-page .news-cta.customer-profile__panel{background:#fff;text-align:left}.customer-profile__news-preference-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:1.25rem;margin-top:1.25rem}.customer-profile__news-settings{display:grid;gap:.8rem;background:#f7fbfa;border:1px solid rgba(42,157,143,.2);border-radius:12px;padding:1rem}.customer-profile__news-settings select,.customer-profile__news-digest input{width:100%;min-height:44px;padding:.65rem;border:1px solid #9aadaa;border-radius:6px;background:#fff}.customer-profile__checkbox{display:flex;align-items:flex-start;gap:.6rem}.customer-profile__checkbox input{margin-top:.2rem}.customer-profile__news-digest{margin-top:1.25rem}@media(max-width:760px){.customer-profile__news-preference-grid{grid-template-columns:1fr}.news-profile-actions{display:grid;grid-template-columns:1fr 1fr}.news-profile-actions a{text-align:center}}
+
+/* Email unsubscribe landing page */
+.email-unsubscribe-page{min-height:60vh;display:grid;place-items:center;padding:3rem 1rem;background:#f5f8fa}.email-unsubscribe-card{width:min(620px,100%);padding:2.5rem;border:1px solid #dce5eb;border-radius:12px;background:#fff;box-shadow:0 14px 35px rgba(22,58,99,.1);text-align:center}.email-unsubscribe-card h1{margin:.35rem 0 .8rem;color:#163a63}.email-unsubscribe-card p{margin-bottom:1.5rem;color:#536778}.email-unsubscribe-card .btn-primary{display:inline-block;text-decoration:none}
