@@ -342,6 +342,26 @@ main a:hover {
     margin-bottom: 1rem;
 }
 
+.report-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 190px;
+}
+
+.report-card h3 {
+    margin-top: 0;
+}
+
+.report-card-action {
+    margin-top: auto;
+    padding-top: 1rem;
+}
+
+.report-card-action .btn-primary {
+    display: inline-block;
+    text-decoration: none;
+}
+
 /* =========================================
    FORM VALUES
 ========================================= */
@@ -2608,4 +2628,15 @@ main section.email-tools,
 
 .btn-danger:hover {
     background: #fae8e8;
+}
+
+/* Campaign targeting adds a CSV import selector to the existing form. */
+.email-campaign-form {
+    grid-template-columns: 2fr 2fr 2fr auto;
+}
+
+@media (max-width: 760px) {
+    .email-campaign-form {
+        grid-template-columns: 1fr;
+    }
 }

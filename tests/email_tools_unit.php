@@ -11,6 +11,10 @@ $sanitized = EmailHtml::sanitize('<p onclick="bad()" style="background:url(javas
 if (str_contains($sanitized, 'onclick') || str_contains($sanitized, '<script') || str_contains($sanitized, 'javascript:') || !str_contains($sanitized, '<strong>traveler</strong>')) {
     $failures[] = 'HTML sanitizer allowlist test failed.';
 }
+$unsubscribeLink = EmailHtml::sanitize('<p><a href="{UnsubscribeURL}">Unsubscribe</a></p>');
+if (!str_contains($unsubscribeLink, 'href="%7BUnsubscribeURL%7D"')) {
+    $failures[] = 'Newsletter unsubscribe placeholder was removed by the HTML sanitizer.';
+}
 
 $previousKey = getenv('NORMAN_EMAIL_TOKEN_KEY');
 putenv('NORMAN_EMAIL_TOKEN_KEY=email-tools-unit-test-key-that-is-long-enough');

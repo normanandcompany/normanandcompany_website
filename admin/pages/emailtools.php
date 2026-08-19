@@ -26,10 +26,11 @@ requireRole('admin');
                     <button type="button" data-editor-command="formatBlock" data-editor-value="h2">Heading</button>
                     <button type="button" data-editor-command="insertUnorderedList">List</button>
                     <button type="button" data-editor-link>Link</button>
+                    <button type="button" data-editor-unsubscribe>Unsubscribe</button>
                 </div>
                 <div id="emailNewsletterEditor" class="email-html-editor" contenteditable="true" role="textbox" aria-multiline="true"><p>Hello {FirstName},</p><p>Write your newsletter here.</p></div>
                 <textarea name="html_body" hidden></textarea>
-                <p class="email-tools-help">Available variables: {FirstName}, {LastName}, {EmailAddress}. An unsubscribe link is appended automatically.</p>
+                <p class="email-tools-help">Available variables: {FirstName}, {LastName}, {EmailAddress}, {UnsubscribeURL}. Use the Unsubscribe button to place the secure recipient-specific link. If omitted, an unsubscribe link is appended automatically.</p>
                 <div class="email-template-form-actions">
                     <button class="btn-primary" id="emailNewsletterTemplateSaveButton" type="submit">Save Newsletter Template</button>
                     <button class="btn-secondary" id="emailNewsletterTemplateCancelButton" type="button" hidden>Cancel Edit</button>
@@ -62,8 +63,9 @@ requireRole('admin');
         <div class="email-tools-grid email-tools-grid-three">
             <form id="emailLeadImportForm" class="email-tools-card" enctype="multipart/form-data">
                 <h2>Import leads</h2>
+                <label>Import name<input name="import_name" maxlength="180" required placeholder="August travel agency leads"></label>
                 <label>CSV file<input type="file" name="leads_csv" accept=".csv,text/csv" required></label>
-                <p class="email-tools-help">Header columns: FirstName, LastName, Company, EmailAddress. Existing addresses are updated without duplicating leads.</p>
+                <p class="email-tools-help">Give each upload a recognizable group name. Header columns: FirstName, LastName, Company, EmailAddress. Existing addresses are updated without duplicating leads.</p>
                 <button class="btn-primary" type="submit">Import CSV</button>
             </form>
             <form id="emailSignatureForm" class="email-tools-card">
@@ -92,14 +94,19 @@ requireRole('admin');
             <form id="emailCampaignForm" class="email-campaign-form">
                 <label>Campaign name<input name="campaign_name" maxlength="180" required></label>
                 <label>Email template<select name="template_id" required><option value="">Choose a template</option></select></label>
+                <label>CSV import<select name="lead_import_id" required><option value="">Choose an import</option></select></label>
                 <button class="btn-primary" type="submit">Send Campaign</button>
             </form>
-            <p class="email-tools-help">This queues every eligible active lead. The server sends one email every three minutes.</p>
+            <p class="email-tools-help">Only eligible active leads from the selected CSV import are queued. The server sends one email every three minutes.</p>
+        </section>
+        <section class="email-tools-card email-tools-table-card">
+            <h2>CSV imports</h2>
+            <div class="product-table-scroll"><table class="product-table"><thead><tr><th>Import</th><th>File</th><th>Leads</th><th>Invalid rows</th><th>Imported</th></tr></thead><tbody id="emailLeadImportRows"></tbody></table></div>
         </section>
         <div class="email-tools-grid">
             <section class="email-tools-card email-tools-table-card">
                 <h2>Campaign statistics</h2>
-                <div class="product-table-scroll"><table class="product-table"><thead><tr><th>Campaign</th><th>Template</th><th>Status</th><th>Queued</th><th>Sent</th><th>Failed / skipped</th></tr></thead><tbody id="emailCampaignRows"></tbody></table></div>
+                <div class="product-table-scroll"><table class="product-table"><thead><tr><th>Campaign</th><th>CSV import</th><th>Template</th><th>Status</th><th>Queued</th><th>Sent</th><th>Failed / skipped</th></tr></thead><tbody id="emailCampaignRows"></tbody></table></div>
             </section>
             <section class="email-tools-card email-tools-table-card">
                 <h2>Recent leads</h2>

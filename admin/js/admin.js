@@ -3790,7 +3790,7 @@ function bindDownloadManagerEvents() {
 
 async function refreshDownloads() {
     const tbody = document.getElementById('downloadsTableBody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="product-empty-state">Loading downloads...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">Loading downloads...</td></tr>';
 
     try {
         const data = await fetchAdminJson('/admin/api/downloads.php');
@@ -3801,7 +3801,7 @@ async function refreshDownloads() {
         updateDownloadMetrics();
         applyDownloadFilters();
     } catch (error) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="product-empty-state">Unable to load downloads.</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">Unable to load downloads.</td></tr>';
         showDownloadAlert(error.message || 'Unable to load downloads.', 'error');
     }
 }
@@ -3851,7 +3851,7 @@ function renderDownloads() {
     if (!tbody) return;
 
     if (downloadManagerState.filteredDownloads.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="product-empty-state">No downloads found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="product-empty-state">No downloads found.</td></tr>';
         return;
     }
 
@@ -3867,7 +3867,6 @@ function renderDownloads() {
         return `<tr>
             <td><strong>${adminEscapeHtml(download.title)}</strong></td>
             <td>${adminEscapeHtml(download.category_description || 'Unassigned')}</td>
-            <td class="download-description-cell">${adminEscapeHtml(download.description)}</td>
             <td>${adminEscapeHtml(download.filename)}${fileExists ? '' : '<br><small>Not in storage</small>'}</td>
             <td>${status}</td>
             <td class="download-link-cell"><a href="${adminEscapeHtml(download.link)}" target="_blank" rel="noopener">${adminEscapeHtml(download.link)}</a></td>
@@ -5409,7 +5408,7 @@ async function newsImageSubmit(event){event.preventDefault();const form=event.cu
 // EMAIL TOOLS
 // =========================================
 
-let emailToolsState = { csrf: '', newsletters: [], newsletter_templates: [], campaigns: [], leads: [], templates: [], signatures: [], metrics: {} };
+let emailToolsState = { csrf: '', newsletters: [], newsletter_templates: [], campaigns: [], lead_imports: [], leads: [], templates: [], signatures: [], metrics: {} };
 
 async function initEmailTools() {
     const app = document.getElementById('emailToolsApp');
@@ -5425,6 +5424,12 @@ async function initEmailTools() {
     app.querySelector('[data-editor-link]')?.addEventListener('click', () => {
         const url = window.prompt('Enter an https:// link:');
         if (url && /^https:\/\//i.test(url)) document.execCommand('createLink', false, url);
+    });
+    app.querySelector('[data-editor-unsubscribe]')?.addEventListener('click', () => {
+        const editor = document.getElementById('emailNewsletterEditor');
+        if (!editor) return;
+        editor.focus();
+        document.execCommand('insertHTML', false, '<a href="{UnsubscribeURL}">Unsubscribe</a>');
     });
     document.getElementById('emailNewsletterTemplateForm')?.addEventListener('submit', event => {
         event.currentTarget.elements.html_body.value = document.getElementById('emailNewsletterEditor')?.innerHTML || '';
@@ -5460,7 +5465,11 @@ async function initEmailTools() {
             if (String(document.getElementById('emailTemplateForm')?.elements.id.value) === String(deleteButton.dataset.deleteSalesTemplate)) emailTemplateResetForm();
         }
     });
-    document.getElementById('emailCampaignForm')?.addEventListener('submit', event => emailToolsSubmit(event, 'send_campaign', 'Queue this campaign for every eligible active lead?'));
+    document.getElementById('emailCampaignForm')?.addEventListener('submit', event => {
+        const importSelect = event.currentTarget.elements.lead_import_id;
+        const importName = importSelect?.options[importSelect.selectedIndex]?.textContent || 'the selected CSV import';
+        emailToolsSubmit(event, 'send_campaign', `Queue this campaign for eligible active leads in ${importName}?`);
+    });
     document.getElementById('emailConfigForm')?.addEventListener('submit', emailConfigSubmit);
     await emailToolsRefresh();
 }
@@ -5516,6 +5525,8 @@ function emailToolsRender() {
     document.querySelectorAll('#emailToolsApp select[name="signature_id"]').forEach(select => select.innerHTML = `<option value="">No signature</option>${signatureOptions}`);
     const templateOptions = emailToolsState.templates.map(item => `<option value="${Number(item.id)}">${emailToolsEscape(item.template_name)}</option>`).join('');
     document.querySelectorAll('#emailToolsApp select[name="template_id"]').forEach(select => select.innerHTML = `<option value="">Choose a template</option>${templateOptions}`);
+    const importOptions = emailToolsState.lead_imports.map(item => `<option value="${Number(item.id)}">${emailToolsEscape(item.import_name)} (${Number(item.lead_count || item.imported_count || 0)} leads)</option>`).join('');
+    document.querySelectorAll('#emailToolsApp select[name="lead_import_id"]').forEach(select => select.innerHTML = `<option value="">Choose an import</option>${importOptions}`);
     const newsletterTemplateOptions = emailToolsState.newsletter_templates.map(item => `<option value="${Number(item.id)}">${emailToolsEscape(item.template_name)}</option>`).join('');
     document.querySelectorAll('#emailToolsApp select[name="newsletter_template_id"]').forEach(select => select.innerHTML = `<option value="">Choose a template</option>${newsletterTemplateOptions}`);
     const newsletterTemplateRows = document.getElementById('emailNewsletterTemplateRows');
@@ -5523,7 +5534,9 @@ function emailToolsRender() {
     const newsletters = document.getElementById('emailNewsletterRows');
     if (newsletters) newsletters.innerHTML = emailToolsState.newsletters.length ? emailToolsState.newsletters.map(item => `<tr><td><strong>${emailToolsEscape(item.newsletter_name)}</strong><small>${emailToolsEscape(item.subject)}</small></td><td>${emailToolsEscape(item.template_name || 'Legacy template')}</td><td><span class="email-status email-status-${emailToolsEscape(item.status)}">${emailToolsEscape(item.status)}</span></td><td>${Number(item.recipient_count || 0)}</td><td>${Number(item.sent_count || 0)}</td><td>${Number(item.failed_count || 0)} / ${Number(item.skipped_count || 0)}</td></tr>`).join('') : '<tr><td colspan="6">No newsletters have been sent.</td></tr>';
     const campaigns = document.getElementById('emailCampaignRows');
-    if (campaigns) campaigns.innerHTML = emailToolsState.campaigns.length ? emailToolsState.campaigns.map(item => `<tr><td><strong>${emailToolsEscape(item.campaign_name)}</strong><small>${emailToolsDate(item.queued_at)}</small></td><td>${emailToolsEscape(item.template_name)}</td><td><span class="email-status email-status-${emailToolsEscape(item.status)}">${emailToolsEscape(item.status)}</span></td><td>${Number(item.recipient_count || 0)}</td><td>${Number(item.sent_count || 0)}</td><td>${Number(item.failed_count || 0)} / ${Number(item.skipped_count || 0)}</td></tr>`).join('') : '<tr><td colspan="6">No campaigns have been sent.</td></tr>';
+    if (campaigns) campaigns.innerHTML = emailToolsState.campaigns.length ? emailToolsState.campaigns.map(item => `<tr><td><strong>${emailToolsEscape(item.campaign_name)}</strong><small>${emailToolsDate(item.queued_at)}</small></td><td>${emailToolsEscape(item.import_name || 'Legacy campaign')}</td><td>${emailToolsEscape(item.template_name)}</td><td><span class="email-status email-status-${emailToolsEscape(item.status)}">${emailToolsEscape(item.status)}</span></td><td>${Number(item.recipient_count || 0)}</td><td>${Number(item.sent_count || 0)}</td><td>${Number(item.failed_count || 0)} / ${Number(item.skipped_count || 0)}</td></tr>`).join('') : '<tr><td colspan="7">No campaigns have been sent.</td></tr>';
+    const leadImports = document.getElementById('emailLeadImportRows');
+    if (leadImports) leadImports.innerHTML = emailToolsState.lead_imports.length ? emailToolsState.lead_imports.map(item => `<tr><td><strong>${emailToolsEscape(item.import_name)}</strong></td><td>${emailToolsEscape(item.source_filename)}</td><td>${Number(item.lead_count || item.imported_count || 0)}</td><td>${Number(item.invalid_count || 0)}</td><td>${emailToolsDate(item.created_at)}</td></tr>`).join('') : '<tr><td colspan="5">No CSV imports have been created.</td></tr>';
     const leads = document.getElementById('emailLeadRows');
     if (leads) leads.innerHTML = emailToolsState.leads.length ? emailToolsState.leads.map(item => `<tr><td><strong>${emailToolsEscape(`${item.first_name || ''} ${item.last_name || ''}`.trim())}</strong><small>${emailToolsEscape(item.email_address)}</small></td><td>${emailToolsEscape(item.company || '—')}</td><td>${emailToolsEscape(item.status)}</td><td>${Number(item.total_emails_sent || 0)}</td><td>${emailToolsDate(item.last_contacted_at)}</td></tr>`).join('') : '<tr><td colspan="5">No leads have been imported.</td></tr>';
     const salesTemplates = document.getElementById('emailSalesTemplateRows');

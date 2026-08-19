@@ -458,7 +458,8 @@ main a:hover {
 }
 
 .port-card,
-.resort-card {
+.resort-card,
+.destination-card {
     min-height: 170px;
     display: flex;
     flex-direction: column;
@@ -474,7 +475,9 @@ main a:hover {
 .port-card:hover,
 .port-card:focus-visible,
 .resort-card:hover,
-.resort-card:focus-visible {
+.resort-card:focus-visible,
+.destination-card:hover,
+.destination-card:focus-visible {
     color: inherit;
     text-decoration: none;
     box-shadow: 0 6px 18px rgba(22, 58, 99, 0.2);
@@ -482,27 +485,37 @@ main a:hover {
 }
 
 .port-card:focus-visible,
-.resort-card:focus-visible {
+.resort-card:focus-visible,
+.destination-card:focus-visible {
     outline: 3px solid var(--primary);
     outline-offset: 3px;
 }
 
 .port-card h2,
-.resort-card h2 {
+.resort-card h2,
+.destination-card h2 {
     margin: 0 0 0.75rem;
 }
 
 .port-card p,
-.resort-card p {
+.resort-card p,
+.destination-card p {
     margin: 0.2rem 0;
 }
 
-.cruise-line-logo {
+.cruise-line-logo,
+.resort-card-image,
+.destination-card-image {
     display: block;
     max-width: 100%;
     max-height: 120px;
     height: auto;
     object-fit: contain;
+}
+
+.resort-card-image,
+.destination-card-image {
+    margin-bottom: 1rem;
 }
 
 .cruise-line-detail-header {
@@ -803,7 +816,8 @@ main a:hover {
 }
 
 .port-detail-header,
-.resort-detail-header {
+.resort-detail-header,
+.destination-detail-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -818,12 +832,14 @@ main a:hover {
 }
 
 .port-detail-header h1,
-.resort-detail-header h1 {
+.resort-detail-header h1,
+.destination-detail-header h1 {
     margin-bottom: 0.5rem;
 }
 
 .port-detail-header p,
-.resort-detail-header p {
+.resort-detail-header p,
+.destination-detail-header p {
     margin: 0;
 }
 
@@ -837,7 +853,8 @@ main a:hover {
 }
 
 .port-detail-grid,
-.resort-detail-grid {
+.resort-detail-grid,
+.destination-detail-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
     gap: 1.5rem;
@@ -845,7 +862,8 @@ main a:hover {
 }
 
 .port-detail-main,
-.resort-detail-main {
+.resort-detail-main,
+.destination-detail-main {
     display: grid;
     gap: 1.5rem;
 }
@@ -862,19 +880,22 @@ main a:hover {
 }
 
 .port-description,
-.resort-description {
+.resort-description,
+.destination-description {
     line-height: 1.65;
 }
 
 .port-facts,
-.resort-facts {
+.resort-facts,
+.destination-facts {
     display: grid;
     gap: 0.75rem;
     margin: 1.5rem 0 0;
 }
 
 .port-facts div,
-.resort-facts div {
+.resort-facts div,
+.destination-facts div {
     display: grid;
     grid-template-columns: minmax(120px, 0.4fr) 1fr;
     gap: 1rem;
@@ -883,18 +904,21 @@ main a:hover {
 }
 
 .port-facts dt,
-.resort-facts dt {
+.resort-facts dt,
+.destination-facts dt {
     font-weight: 700;
 }
 
 .port-facts dd,
-.resort-facts dd {
+.resort-facts dd,
+.destination-facts dd {
     margin: 0;
     overflow-wrap: anywhere;
 }
 
 .port-map,
-.resort-map {
+.resort-map,
+.destination-map {
     display: block;
     width: 100%;
     min-height: 420px;
@@ -903,11 +927,13 @@ main a:hover {
 }
 
 .port-map-link,
-.resort-map-link {
+.resort-map-link,
+.destination-map-link {
     margin: 0.75rem 0 0;
 }
 
-.resort-detail-image {
+.resort-detail-image,
+.destination-detail-image {
     display: block;
     width: 100%;
     max-height: 420px;
@@ -943,7 +969,8 @@ select {
     .cruise-line-info-grid,
     .ship-detail-layout,
     .port-detail-grid,
-    .resort-detail-grid {
+    .resort-detail-grid,
+    .destination-detail-grid {
         grid-template-columns: 1fr;
     }
 

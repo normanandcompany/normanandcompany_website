@@ -23,20 +23,9 @@
 
     <div id="destinationsContainer" class="card-grid">
 
-        <! -- Loading message -->
+        <!-- Loading message -->
             <p id="loadingMessage">Loading destinations...</p>
 
     </div>
 
-    <!-- ========================================= -->
-    <!-- PAGE-SPECIFIC SCRIPT -->
-    <!-- Loads resort JSON data -->
-    <!-- ========================================= -->
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            loadDestinations();
-        });
-    </script>
-    
 </section>

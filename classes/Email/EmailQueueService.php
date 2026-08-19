@@ -64,8 +64,16 @@ final class EmailQueueService
             if (!$campaign || !in_array($campaign['status'], ['draft', 'paused'], true)) {
                 throw new InvalidArgumentException('Only draft or paused campaigns can be queued.');
             }
-            $leads = $this->pdo->query("SELECT l.* FROM email_leads l LEFT JOIN email_suppressions s ON s.email_address=l.email_address
-                WHERE l.status='active' AND s.id IS NULL ORDER BY l.id")->fetchAll(PDO::FETCH_ASSOC);
+            $leadImportId = (int) ($campaign['lead_import_id'] ?? 0);
+            if ($leadImportId < 1) {
+                throw new InvalidArgumentException('Choose a CSV import before queueing this campaign.');
+            }
+            $leads = $this->pdo->prepare("SELECT l.* FROM email_lead_import_members m
+                INNER JOIN email_leads l ON l.id=m.lead_id
+                LEFT JOIN email_suppressions s ON s.email_address=l.email_address
+                WHERE m.import_id=:import AND l.status='active' AND s.id IS NULL ORDER BY l.id");
+            $leads->execute([':import' => $leadImportId]);
+            $leads = $leads->fetchAll(PDO::FETCH_ASSOC);
             $insert = $this->pdo->prepare("INSERT IGNORE INTO email_sales_recipients
                 (campaign_id,lead_id,email_address,first_name,last_name,company,unsubscribe_token_hash)
                 VALUES(:campaign,:lead,:email,:first,:last,:company,:token_hash)");
@@ -84,7 +92,7 @@ final class EmailQueueService
                 }
             }
             if ($count === 0 && $campaign['status'] === 'draft') {
-                throw new RuntimeException('No eligible active leads were found.');
+                throw new RuntimeException('No eligible active leads were found in the selected CSV import.');
             }
             $this->pdo->prepare("UPDATE email_sales_campaigns SET status='queued',queued_at=COALESCE(queued_at,NOW()),completed_at=NULL WHERE id=:id")
                 ->execute([':id' => $campaignId]);
@@ -191,8 +199,14 @@ final class EmailQueueService
         }
         $token = EmailToken::make('newsletter', (int) $recipient['id'], $recipient['email_address']);
         $url = $this->unsubscribeUrl($token);
+        $unsubscribePlaceholders = ['{UnsubscribeURL}', '%7BUnsubscribeURL%7D'];
+        $hasPlacedUnsubscribeLink = str_contains($newsletter['html_body'], $unsubscribePlaceholders[0])
+            || str_contains($newsletter['html_body'], $unsubscribePlaceholders[1]);
         $body = $this->replaceVariables($newsletter['html_body'], $recipient);
-        $body .= $this->unsubscribeFooter($url);
+        $body = str_replace($unsubscribePlaceholders, htmlspecialchars($url, ENT_QUOTES, 'UTF-8'), $body);
+        if (!$hasPlacedUnsubscribeLink) {
+            $body .= $this->unsubscribeFooter($url);
+        }
         $profile = $this->config['newsletter'] ?? [];
         try {
             $this->mailer->send([

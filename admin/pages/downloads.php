@@ -8,7 +8,6 @@ requireRole('admin');
 
     <div class="product-manager-header">
         <div>
-            <p class="section-kicker">Customer resources</p>
             <h1>Downloads</h1>
         </div>
         <button type="button" class="btn-primary product-add-button" id="addDownloadBtn">Add Download</button>
@@ -41,8 +40,8 @@ requireRole('admin');
     <div class="product-table-panel">
         <div class="product-table-scroll">
             <table class="product-table download-table">
-                <thead><tr><th>Title</th><th>Category</th><th>Description</th><th>Filename</th><th>Viewable</th><th>Link</th><th>Downloads</th><th>Actions</th></tr></thead>
-                <tbody id="downloadsTableBody"><tr><td colspan="8" class="product-empty-state">Loading downloads...</td></tr></tbody>
+                <thead><tr><th>Title</th><th>Category</th><th>Filename</th><th>Viewable</th><th>Link</th><th>Downloads</th><th>Actions</th></tr></thead>
+                <tbody id="downloadsTableBody"><tr><td colspan="7" class="product-empty-state">Loading downloads...</td></tr></tbody>
             </table>
         </div>
     </div>

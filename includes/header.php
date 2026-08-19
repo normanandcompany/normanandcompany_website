@@ -1,6 +1,8 @@
 <?php
 $stylesPath = $_SERVER['DOCUMENT_ROOT'] . '/css/styles.css';
 $stylesVersion = is_file($stylesPath) ? (string) filemtime($stylesPath) : '20260721';
+$mainScriptPath = $_SERVER['DOCUMENT_ROOT'] . '/js/main.js';
+$mainScriptVersion = is_file($mainScriptPath) ? (string) filemtime($mainScriptPath) : '20260816';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -37,7 +39,7 @@ $stylesVersion = is_file($stylesPath) ? (string) filemtime($stylesPath) : '20260
     }
     </script>
 
-    <script src="/js/main.js" defer></script>
+    <script src="/js/main.js?v=<?= rawurlencode($mainScriptVersion) ?>" defer></script>
 </head>
 <body>
 

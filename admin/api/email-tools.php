@@ -51,11 +51,16 @@ function emailToolsBootstrap(PDO $pdo): array
         FROM email_newsletters n LEFT JOIN email_newsletter_templates t ON t.id=n.template_id
         LEFT JOIN email_newsletter_recipients r ON r.newsletter_id=n.id
         GROUP BY n.id ORDER BY n.id DESC LIMIT 100";
-    $campaignSql = "SELECT c.id,c.campaign_name,c.status,c.queued_at,c.completed_at,t.template_name,
+    $campaignSql = "SELECT c.id,c.campaign_name,c.status,c.queued_at,c.completed_at,t.template_name,i.import_name,
         COUNT(r.id) recipient_count,SUM(r.status='sent') sent_count,SUM(r.status='failed') failed_count,
         SUM(r.status IN ('skipped','unsubscribed')) skipped_count,SUM(r.status='pending') pending_count
         FROM email_sales_campaigns c INNER JOIN email_sales_templates t ON t.id=c.template_id
+        LEFT JOIN email_lead_imports i ON i.id=c.lead_import_id
         LEFT JOIN email_sales_recipients r ON r.campaign_id=c.id GROUP BY c.id ORDER BY c.id DESC LIMIT 100";
+    $leadImports = $pdo->query("SELECT i.id,i.import_name,i.source_filename,i.imported_count,i.invalid_count,i.created_at,
+        COUNT(m.lead_id) lead_count FROM email_lead_imports i
+        LEFT JOIN email_lead_import_members m ON m.import_id=i.id
+        GROUP BY i.id ORDER BY i.id DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
     $leads = $pdo->query("SELECT id,first_name,last_name,company,email_address,status,total_emails_sent,last_contacted_at
         FROM email_leads ORDER BY id DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
     $templates = $pdo->query('SELECT t.id,t.template_name,t.subject_template,t.body_template,t.signature_id,t.updated_at,s.signature_name
@@ -77,6 +82,7 @@ function emailToolsBootstrap(PDO $pdo): array
         'newsletter_templates' => $newsletterTemplates,
         'newsletters' => $pdo->query($newsletterSql)->fetchAll(PDO::FETCH_ASSOC),
         'campaigns' => $pdo->query($campaignSql)->fetchAll(PDO::FETCH_ASSOC),
+        'lead_imports' => $leadImports,
         'leads' => $leads,
         'templates' => $templates,
         'signatures' => $signatures,
@@ -216,6 +222,7 @@ try {
             emailToolsJson(['success' => true, 'message' => 'Sales template deleted.']);
 
         case 'import_leads':
+            $importName = emailToolsText('import_name', 180);
             $file = $_FILES['leads_csv'] ?? null;
             if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 throw new InvalidArgumentException('Choose a CSV file to import.');
@@ -237,8 +244,14 @@ try {
                     throw new InvalidArgumentException('CSV header must contain FirstName, LastName, Company, and EmailAddress.');
                 }
             }
+            $sourceFilename = mb_substr(basename((string) ($file['name'] ?? 'leads.csv')), 0, 255);
+            $pdo->beginTransaction();
+            $createImport = $pdo->prepare('INSERT INTO email_lead_imports(import_name,source_filename,created_by_user_id) VALUES(:name,:filename,:user)');
+            $createImport->execute([':name' => $importName, ':filename' => $sourceFilename, ':user' => $userId]);
+            $importId = (int) $pdo->lastInsertId();
             $upsert = $pdo->prepare("INSERT INTO email_leads(first_name,last_name,company,email_address) VALUES(:first,:last,:company,:email)
-                ON DUPLICATE KEY UPDATE first_name=VALUES(first_name),last_name=VALUES(last_name),company=VALUES(company),updated_at=NOW()");
+                ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id),first_name=VALUES(first_name),last_name=VALUES(last_name),company=VALUES(company),updated_at=NOW()");
+            $addMember = $pdo->prepare('INSERT IGNORE INTO email_lead_import_members(import_id,lead_id) VALUES(:import,:lead)');
             $imported = 0;
             $invalid = 0;
             while (($row = fgetcsv($handle)) !== false) {
@@ -254,21 +267,35 @@ try {
                     ':company' => mb_substr(trim((string) ($row[$columns['company']] ?? '')), 0, 180),
                     ':email' => $email
                 ]);
-                $imported++;
+                $leadId = (int) $pdo->lastInsertId();
+                $addMember->execute([':import' => $importId, ':lead' => $leadId]);
+                $imported += $addMember->rowCount();
             }
             fclose($handle);
-            emailToolsJson(['success' => true, 'message' => "Imported or updated {$imported} lead(s); skipped {$invalid} invalid row(s)."]);
+            if ($imported === 0) {
+                throw new InvalidArgumentException('The CSV did not contain any valid, unique leads.');
+            }
+            $pdo->prepare('UPDATE email_lead_imports SET imported_count=:imported,invalid_count=:invalid WHERE id=:id')
+                ->execute([':imported' => $imported, ':invalid' => $invalid, ':id' => $importId]);
+            $pdo->commit();
+            emailToolsJson(['success' => true, 'message' => "Created {$importName} with {$imported} lead(s); skipped {$invalid} invalid row(s)."]);
 
         case 'send_campaign':
             $name = emailToolsText('campaign_name', 180);
             $templateId = (int) ($_POST['template_id'] ?? 0);
+            $leadImportId = (int) ($_POST['lead_import_id'] ?? 0);
             $check = $pdo->prepare('SELECT 1 FROM email_sales_templates WHERE id=:id');
             $check->execute([':id' => $templateId]);
             if (!$check->fetchColumn()) {
                 throw new InvalidArgumentException('Choose a valid email template.');
             }
-            $pdo->prepare('INSERT INTO email_sales_campaigns(campaign_name,template_id,created_by_user_id) VALUES(:name,:template,:user)')
-                ->execute([':name' => $name, ':template' => $templateId, ':user' => $userId]);
+            $checkImport = $pdo->prepare('SELECT 1 FROM email_lead_imports WHERE id=:id');
+            $checkImport->execute([':id' => $leadImportId]);
+            if (!$checkImport->fetchColumn()) {
+                throw new InvalidArgumentException('Choose a valid CSV import.');
+            }
+            $pdo->prepare('INSERT INTO email_sales_campaigns(campaign_name,template_id,lead_import_id,created_by_user_id) VALUES(:name,:template,:import,:user)')
+                ->execute([':name' => $name, ':template' => $templateId, ':import' => $leadImportId, ':user' => $userId]);
             $campaignId = (int) $pdo->lastInsertId();
             $count = (new EmailQueueService($pdo))->queueSalesCampaign($campaignId);
             emailToolsJson(['success' => true, 'message' => "Campaign queued for {$count} lead(s)."]);

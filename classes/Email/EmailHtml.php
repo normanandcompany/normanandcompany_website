@@ -68,6 +68,9 @@ final class EmailHtml
 
     private static function safeUrl(string $url): bool
     {
+        if ($url === '{UnsubscribeURL}') {
+            return true;
+        }
         if ($url === '' || str_starts_with($url, '/') || str_starts_with($url, '#')) {
             return true;
         }

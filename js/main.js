@@ -103,6 +103,10 @@ async function loadPage(pageName, options = {}) {
                     loadDestinations();
                     break;
 
+                case 'destination':
+                    loadDestinationPage(options.destinationId || null);
+                    break;
+
                 case 'travelstore':
                     initTravelStore(options.category || null);
                     break; 
@@ -991,7 +995,15 @@ async function loadResorts() {
             card.addEventListener('click', event => {
                 openResortPage(event, resortId);
             });
+
+            const imageUrl = getDatabaseImageUrl(resort.image_url, '/images/resorts/');
+
             card.innerHTML = `
+                ${imageUrl ? `
+                    <img src="${escapeHtml(imageUrl)}"
+                         alt="${escapeHtml(resort.resort_name)}"
+                         class="resort-card-image">
+                ` : ''}
                 <h2>${formatDatabaseText(resort.resort_name)}</h2>
                 ${resort.city ? `<p>${formatDatabaseText(resort.city)}</p>` : ''}
                 ${resort.country ? `<p>${formatDatabaseText(resort.country)}</p>` : ''}
@@ -1348,61 +1360,201 @@ function showResortReviewFormMessage(message, isError) {
 // =========================================
     
 async function loadDestinations() {
-    // Get the HTML container where cards will be inserted
     const container = document.getElementById('destinationsContainer');
 
-    // Stop if container does not exist
-    if (!container) return;
-
-    const url = '/api/getDestinations.php';
+    if (!container) {
+        return;
+    }
 
     try {
-        const response = await fetch(url);
-
-        // Check for errors
-        if (!response.ok) {
-            throw new Error(`HTTP Error: ${response.status}`);
-        }
-
-        // Convert response to JSON
+        const response = await fetch('/api/getDestinations.php');
         const destinations = await response.json();
 
-        // Clear loading message
+        if (!response.ok || !Array.isArray(destinations)) {
+            throw new Error(destinations.error || `HTTP error! Status: ${response.status}`);
+        }
+
         container.innerHTML = '';
 
-        // Loop through each destination
-        destinations.forEach(destination => { 
+        destinations.forEach(destination => {
+            const destinationId = Number.parseInt(destination.id, 10);
 
-            // Create card element
-            const card = document.createElement('div');
-            card.classList.add('card');
+            if (!destinationId) {
+                return;
+            }
 
-            // Build card HTML
-            card.innerHTML = `
-                <h3>${destination.destination_name}</h3>
-                <p><strong class="highlight-strong">${destination.country_name}</strong></p>
-                <p>${destination.description}</p>
-                `;
-
-                // Add card to container
-                container.appendChild(card);
-    
+            const card = document.createElement('a');
+            card.classList.add('card', 'destination-card');
+            card.href = `/pages/destination.php?id=${encodeURIComponent(destinationId)}`;
+            card.setAttribute('aria-label', `View ${destination.destination_name}`);
+            card.addEventListener('click', event => {
+                openDestinationPage(event, destinationId);
             });
 
-        } catch (error) {
+            const imageUrl = getDatabaseImageUrl(destination.image_url, '/images/destinations/');
+            const imageWidth = Number.parseInt(destination.image_size, 10);
+            const widthAttribute = Number.isFinite(imageWidth) && imageWidth > 0
+                ? ` width="${imageWidth}"`
+                : '';
 
-            console.error('Error loading destinations:', error);
-
-            // Show user-friendly error
-            container.innerHTML = `
-                <div class="card">
-                    <h3>Error</h3>
-                    <p>Unable to load destination data.</p>
-                </div>
+            card.innerHTML = `
+                ${imageUrl ? `
+                    <img src="${escapeHtml(imageUrl)}"
+                         alt="${escapeHtml(destination.destination_name)}"
+                         class="destination-card-image"
+                         ${widthAttribute}>
+                ` : ''}
+                <h2>${formatDatabaseText(destination.destination_name)}</h2>
+                ${destination.country_name ? `<p>${formatDatabaseText(destination.country_name)}</p>` : ''}
             `;
-        }  
 
+            container.appendChild(card);
+        });
+
+        if (!destinations.length) {
+            container.innerHTML = '<div class="card"><p>No destinations are currently available.</p></div>';
+        }
+    } catch (error) {
+        console.error('Error loading destinations:', error);
+        container.innerHTML = '<div class="card"><h3>Error</h3><p>Unable to load destination data.</p></div>';
     }
+}
+
+function openDestinationPage(event, destinationId) {
+    event.preventDefault();
+    loadPage('destination', {
+        publicPage: true,
+        destinationId
+    });
+}
+
+async function loadDestinationPage(destinationId) {
+    const container = document.getElementById('destinationDetail');
+    let id = Number.parseInt(destinationId, 10);
+
+    if (!container) {
+        return;
+    }
+
+    if (!id) {
+        id = Number.parseInt(new URLSearchParams(window.location.search).get('id'), 10);
+    }
+
+    if (!id) {
+        container.innerHTML = '<div class="card"><p>A valid destination was not selected.</p></div>';
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/getDestinationPage.php?id=${encodeURIComponent(id)}`);
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP error! Status: ${response.status}`);
+        }
+
+        renderDestinationPage(data.destination, container);
+    } catch (error) {
+        console.error('Error loading destination information:', error);
+        container.innerHTML = '<div class="card"><p>Unable to load destination information.</p></div>';
+    }
+}
+
+function renderDestinationPage(destination, container) {
+    const latitude = Number.parseFloat(destination.latitude);
+    const longitude = Number.parseFloat(destination.longitude);
+    const hasCoordinates = Number.isFinite(latitude)
+        && Number.isFinite(longitude)
+        && latitude >= -90
+        && latitude <= 90
+        && longitude >= -180
+        && longitude <= 180;
+    const meta = document.getElementById('page-title-meta');
+
+    if (meta) {
+        meta.dataset.title = destination.meta_title
+            || `Norman and Company | ${destination.destination_name}`;
+        updatePageTitle();
+    }
+
+    const imageUrl = getDatabaseImageUrl(destination.image_url, '/images/destinations/');
+    const details = [
+        ['Destination', destination.destination_name],
+        ['Country', destination.country_name]
+    ].filter(([, value]) => value !== null && value !== undefined && String(value) !== '');
+
+    let mapMarkup = '<p>Map coordinates are not available for this destination.</p>';
+
+    if (hasCoordinates) {
+        const latitudeDelta = 0.08;
+        const longitudeDelta = 0.12;
+        const bounds = [
+            longitude - longitudeDelta,
+            latitude - latitudeDelta,
+            longitude + longitudeDelta,
+            latitude + latitudeDelta
+        ].join(',');
+        const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bounds)}&layer=mapnik&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
+        const fullMapUrl = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=13/${encodeURIComponent(latitude)}/${encodeURIComponent(longitude)}`;
+
+        mapMarkup = `
+            <iframe
+                class="destination-map"
+                src="${escapeHtml(mapUrl)}"
+                title="Map showing ${escapeHtml(destination.destination_name)}"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade">
+            </iframe>
+            <p class="destination-map-link">
+                <a href="${escapeHtml(fullMapUrl)}" target="_blank" rel="noopener noreferrer">
+                    View Larger Map
+                </a>
+            </p>
+        `;
+    }
+
+    container.innerHTML = `
+        <p><a href="/pages/destinations.php" onclick="loadPage('destinations', { publicPage: true }); return false;">&larr; Back to all destinations</a></p>
+
+        <header class="destination-detail-header">
+            <div>
+                <h1>${formatDatabaseText(destination.destination_name)}</h1>
+                ${destination.country_name ? `<p>${formatDatabaseText(destination.country_name)}</p>` : ''}
+            </div>
+        </header>
+
+        <div class="destination-detail-grid">
+            <div class="destination-detail-main">
+                ${imageUrl ? `
+                    <div class="destination-detail-media">
+                        <img
+                            class="destination-detail-image"
+                            src="${escapeHtml(imageUrl)}"
+                            alt="${escapeHtml(destination.destination_name)}">
+                    </div>
+                ` : ''}
+
+                <article class="card destination-info-card">
+                    <h2>Destination Information</h2>
+                    ${destination.description ? `<p class="destination-description">${formatDatabaseText(destination.description)}</p>` : ''}
+                    <dl class="destination-facts">
+                        ${details.map(([label, value]) => `
+                            <div>
+                                <dt>${escapeHtml(label)}</dt>
+                                <dd>${formatDatabaseText(value)}</dd>
+                            </div>
+                        `).join('')}
+                    </dl>
+                </article>
+            </div>
+
+            <article class="card destination-map-card">
+                <h2>Map</h2>
+                ${mapMarkup}
+            </article>
+        </div>
+    `;
+}
 
 // =========================================
 // TRAVEL STORE UX
