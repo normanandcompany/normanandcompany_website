@@ -14,6 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 try {
     $id = taskIntOrNull($_POST['id'] ?? '', 'Task ID') ?? 0;
     $userId = taskIntOrNull($_POST['user_id'] ?? '', 'Assigned user');
+    $leadId = taskIntOrNull($_POST['lead_id'] ?? '', 'Lead');
+    $opportunityId = taskIntOrNull($_POST['opportunity_id'] ?? '', 'Opportunity');
     $title = taskRequiredString($_POST['title'] ?? '', 'Task title');
     $description = taskStringOrNull($_POST['description'] ?? '');
     $status = taskAllowedValue(
@@ -46,6 +48,8 @@ try {
     if (!taskUserIsAdministrator($pdo, $userId)) {
         throw new InvalidArgumentException('Tasks can only be assigned to administrators.');
     }
+
+    [$leadId, $opportunityId] = taskResolveCrmRelationship($pdo, $leadId, $opportunityId);
 
     if ($isRecurring) {
         if ($dueAt === null) {
@@ -90,6 +94,8 @@ try {
 
     $data = [
         'user_id' => $userId,
+        'lead_id' => $leadId,
+        'opportunity_id' => $opportunityId,
         'title' => $title,
         'description' => $description,
         'task_status' => $status,
@@ -108,6 +114,8 @@ try {
             UPDATE tasks
             SET
                 user_id = :user_id,
+                lead_id = :lead_id,
+                opportunity_id = :opportunity_id,
                 title = :title,
                 description = :description,
                 task_status = :task_status,
@@ -132,6 +140,8 @@ try {
         $sql = "
             INSERT INTO tasks (
                 user_id,
+                lead_id,
+                opportunity_id,
                 title,
                 description,
                 task_status,
@@ -145,6 +155,8 @@ try {
                 recurrence_sequence
             ) VALUES (
                 :user_id,
+                :lead_id,
+                :opportunity_id,
                 :title,
                 :description,
                 :task_status,

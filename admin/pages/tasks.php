@@ -94,6 +94,7 @@ requireRole('admin');
                     <tr>
                         <th>Task</th>
                         <th>Assigned To</th>
+                        <th>Related To</th>
                         <th>Priority</th>
                         <th>Status</th>
                         <th>Due</th>
@@ -103,7 +104,7 @@ requireRole('admin');
                 </thead>
                 <tbody id="tasksTableBody">
                     <tr>
-                        <td colspan="7" class="product-empty-state">Loading tasks...</td>
+                        <td colspan="8" class="product-empty-state">Loading tasks...</td>
                     </tr>
                 </tbody>
             </table>
@@ -150,6 +151,22 @@ requireRole('admin');
                             maxlength="255"
                             required
                         >
+                    </div>
+
+                    <div class="product-field-row two-column">
+                        <div class="form-group stacked">
+                            <label for="taskLeadId">Related Lead</label>
+                            <select id="taskLeadId" name="lead_id">
+                                <option value="">No lead</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group stacked">
+                            <label for="taskOpportunityId">Related Opportunity</label>
+                            <select id="taskOpportunityId" name="opportunity_id">
+                                <option value="">No opportunity</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="product-field-row two-column">
@@ -252,6 +269,7 @@ requireRole('admin');
                         <strong id="taskPreviewTitle">New Task</strong>
                         <span id="taskPreviewUser">No user selected</span>
                         <small id="taskPreviewDue">No due date</small>
+                        <small id="taskPreviewRelation">No related lead or opportunity</small>
                         <small id="taskPreviewRecurrence">One-time task</small>
                     </div>
                 </aside>

@@ -15,6 +15,24 @@ requireRole('admin');
  
     <h1>Dashboard</h1>
 
+    <section class="dashboard-alerts" id="dashboardAlerts" aria-labelledby="dashboardAlertsTitle">
+        <div class="dashboard-alerts-header">
+            <div>
+                <p class="section-kicker">Action required</p>
+                <h2 id="dashboardAlertsTitle">Overdue Alerts</h2>
+            </div>
+            <span class="dashboard-alert-count" data-field="overdue_alert_count" data-format="integer">0</span>
+        </div>
+        <p class="dashboard-alerts-help">Open tasks past their due date and unresolved contact requests older than 48 hours appear here.</p>
+        <div class="dashboard-alert-summary" aria-label="Overdue alert totals">
+            <span><strong data-field="overdue_task_count" data-format="integer">0</strong> tasks</span>
+            <span><strong data-field="overdue_contact_count" data-format="integer">0</strong> contact requests</span>
+        </div>
+        <div id="dashboardAlertList" class="dashboard-alert-list" role="list">
+            <p class="dashboard-alert-empty">Loading alerts...</p>
+        </div>
+    </section>
+
     <div class="dashboard-tabs" role="tablist" aria-label="Dashboard sections">
         <button type="button" class="dashboard-tab active" id="dashboardTabButtonSite" data-dashboard-tab="site-info" role="tab" aria-selected="true" aria-controls="dashboardTabSiteInfo">Site Info</button>
         <button type="button" class="dashboard-tab" id="dashboardTabButtonProducts" data-dashboard-tab="product-info" role="tab" aria-selected="false" aria-controls="dashboardTabProductInfo">Product Info</button>
@@ -23,6 +41,7 @@ requireRole('admin');
         <button type="button" class="dashboard-tab" id="dashboardTabButtonContacts" data-dashboard-tab="contacts" role="tab" aria-selected="false" aria-controls="dashboardTabContacts">Contacts</button>
         <button type="button" class="dashboard-tab" id="dashboardTabButtonUsers" data-dashboard-tab="users" role="tab" aria-selected="false" aria-controls="dashboardTabUsers">Users</button>
         <button type="button" class="dashboard-tab" id="dashboardTabButtonFinancial" data-dashboard-tab="financial" role="tab" aria-selected="false" aria-controls="dashboardTabFinancial">Financial</button>
+        <button type="button" class="dashboard-tab" id="dashboardTabButtonSales" data-dashboard-tab="sales-funnel" role="tab" aria-selected="false" aria-controls="dashboardTabSales">Sales Funnel</button>
     </div>
 
     <div class="dashboard-tab-panels">
@@ -310,6 +329,10 @@ requireRole('admin');
             <h3>Contacts (Last 30 Days)</h3>
             <span class="metric-value" data-field="contacts_last_30_days" data-format="integer">0</span>
         </div>
+        <div class="card">
+            <h3>Overdue Contact Requests</h3>
+            <span class="metric-value" data-field="overdue_contact_count" data-format="integer">0</span>
+        </div>
     </div>
 
     <div class="product-table-panel dashboard-contact-panel">
@@ -324,12 +347,14 @@ requireRole('admin');
                         <th>Name</th>
                         <th>Subject and Message</th>
                         <th>Contact Information</th>
+                        <th>Status</th>
                         <th>Submitted</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="dashboardContactsBody">
                     <tr>
-                        <td colspan="4" class="product-empty-state">Loading contacts...</td>
+                        <td colspan="6" class="product-empty-state">Loading contacts...</td>
                     </tr>
                 </tbody>
             </table>
@@ -476,6 +501,20 @@ requireRole('admin');
             <span class="metric-value" data-field="average_sale" data-format="currency">$0.00</span>
         </div>
     </div>
+    </div>
+    </div>
+
+    <div class="dashboard-tab-panel" id="dashboardTabSales" data-dashboard-panel="sales-funnel" role="tabpanel" aria-labelledby="dashboardTabButtonSales" hidden>
+        <strong class="highlight-strong">Sales Funnel</strong>
+        <div class="card-grid">
+            <div class="card"><h3>New Leads</h3><span class="metric-value" data-field="crm_new_leads" data-format="integer">0</span></div>
+            <div class="card"><h3>Qualified Leads</h3><span class="metric-value" data-field="crm_qualified_leads" data-format="integer">0</span></div>
+            <div class="card"><h3>Open Opportunities</h3><span class="metric-value" data-field="crm_open_opportunities" data-format="integer">0</span></div>
+            <div class="card"><h3>Pipeline Value</h3><span class="metric-value" data-field="crm_pipeline_value" data-format="currency">$0.00</span></div>
+            <div class="card"><h3>Awaiting Payment</h3><span class="metric-value" data-field="crm_awaiting_payment" data-format="integer">0</span></div>
+            <div class="card"><h3>Paid Sales Orders</h3><span class="metric-value" data-field="crm_paid_orders" data-format="integer">0</span></div>
+            <div class="card"><h3>Sales Order Revenue</h3><span class="metric-value" data-field="crm_sales_order_revenue" data-format="currency">$0.00</span></div>
+        </div>
     </div>
 
     </div>

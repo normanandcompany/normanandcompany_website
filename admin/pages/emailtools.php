@@ -94,10 +94,14 @@ requireRole('admin');
             <form id="emailCampaignForm" class="email-campaign-form">
                 <label>Campaign name<input name="campaign_name" maxlength="180" required></label>
                 <label>Email template<select name="template_id" required><option value="">Choose a template</option></select></label>
-                <label>CSV import<select name="lead_import_id" required><option value="">Choose an import</option></select></label>
+                <label>Audience<select name="audience"><option value="all">All eligible CRM leads</option><option value="import">Selected CSV import</option><option value="filtered">Filtered CRM leads</option></select></label>
+                <label>CSV import<select name="lead_import_id"><option value="">Any import / not required</option></select></label>
+                <label>Lead status<select name="lead_status"><option value="">Any status</option><option>New</option><option>Contacted</option><option>Nurturing</option><option>Qualified</option><option>Disqualified</option><option>Converted</option></select></label>
+                <label>Lead source<input name="lead_source" maxlength="80" placeholder="Any source"></label>
+                <label>Opportunity<select name="opportunity_state"><option value="">With or without</option><option value="open">Open opportunities</option><option value="none">Without opportunities</option><option value="lost">Lost opportunities</option><option value="customer">Existing customers</option></select></label>
                 <button class="btn-primary" type="submit">Send Campaign</button>
             </form>
-            <p class="email-tools-help">Only eligible active leads from the selected CSV import are queued. The server sends one email every three minutes.</p>
+            <p class="email-tools-help">Suppressed, unsubscribed, do-not-contact, and invalid leads are always excluded. The server sends one email every three minutes.</p>
         </section>
         <section class="email-tools-card email-tools-table-card">
             <h2>CSV imports</h2>

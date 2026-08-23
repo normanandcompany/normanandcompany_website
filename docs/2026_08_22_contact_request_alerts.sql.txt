@@ -1,0 +1,5 @@
+ALTER TABLE norman_contacts
+    ADD COLUMN contact_status VARCHAR(30) NOT NULL DEFAULT 'new' AFTER message,
+    ADD COLUMN resolved_at DATETIME NULL AFTER contact_status,
+    ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER resolved_at,
+    ADD KEY idx_norman_contacts_status_created (contact_status, created_at);

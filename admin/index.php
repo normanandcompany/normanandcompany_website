@@ -80,6 +80,9 @@ if ($adminJsVersion === '') {
                 <li><a href="#" onclick="loadPage('users')">Users</a></li>
                 <li><a href="#" onclick="loadPage('bookchooser')">Sweepstakes</a></li>
                 <li><a href="#" onclick="loadPage('transactions')">Transactions</a></li>
+                <li><a href="#" onclick="loadPage('leads')">Leads</a></li>
+                <li><a href="#" onclick="loadPage('opportunities')">Opportunities</a></li>
+                <li><a href="#" onclick="loadPage('salesorders')">Sales Orders</a></li>
                 <li><a href="#" onclick="loadPage('travelcontent')">Travel Content</a></li>
                 <li><a href="#" onclick="loadPage('blogposts')">Blog Editor</a></li>
                 <li><a href="#" onclick="loadPage('news')">News Aggregator</a></li>

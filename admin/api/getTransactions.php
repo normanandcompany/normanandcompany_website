@@ -26,13 +26,17 @@ try {
         SELECT
             t.id,
             t.order_id,
-            o.order_number,
-            o.order_status,
-            o.total_amount AS order_total_amount,
-            o.created_at AS order_created_at,
+            t.sales_order_id,
+            t.opportunity_id,
+            t.lead_id,
+            t.originating_campaign_id,
+            COALESCE(o.order_number, so.order_number) AS order_number,
+            COALESCE(o.order_status, so.status) AS order_status,
+            COALESCE(o.total_amount, so.grand_total) AS order_total_amount,
+            COALESCE(o.created_at, so.created_at) AS order_created_at,
             u.id AS user_id,
-            CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
-            u.email_address AS customer_email,
+            COALESCE(CONCAT(u.first_name, ' ', u.last_name), so.contact_name_snapshot) AS customer_name,
+            COALESCE(u.email_address, so.email_snapshot) AS customer_email,
             t.transaction_reference,
             t.payment_provider,
             t.transaction_type,
@@ -78,6 +82,7 @@ try {
             ) AS gross_profit_amount
         FROM transactions t
         LEFT JOIN orders o ON o.id = t.order_id
+        LEFT JOIN sales_orders so ON so.id = t.sales_order_id
         LEFT JOIN users u ON u.id = o.user_id
         {$whereSql}
         ORDER BY COALESCE(t.processed_at, t.created_at) DESC, t.id DESC

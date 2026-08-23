@@ -284,18 +284,27 @@ try {
             $name = emailToolsText('campaign_name', 180);
             $templateId = (int) ($_POST['template_id'] ?? 0);
             $leadImportId = (int) ($_POST['lead_import_id'] ?? 0);
+            $audience = in_array($_POST['audience'] ?? '', ['all', 'import', 'filtered'], true) ? (string) $_POST['audience'] : 'all';
             $check = $pdo->prepare('SELECT 1 FROM email_sales_templates WHERE id=:id');
             $check->execute([':id' => $templateId]);
             if (!$check->fetchColumn()) {
                 throw new InvalidArgumentException('Choose a valid email template.');
             }
-            $checkImport = $pdo->prepare('SELECT 1 FROM email_lead_imports WHERE id=:id');
-            $checkImport->execute([':id' => $leadImportId]);
-            if (!$checkImport->fetchColumn()) {
-                throw new InvalidArgumentException('Choose a valid CSV import.');
+            if ($audience === 'import') {
+                $checkImport = $pdo->prepare('SELECT 1 FROM email_lead_imports WHERE id=:id');
+                $checkImport->execute([':id' => $leadImportId]);
+                if (!$checkImport->fetchColumn()) {
+                    throw new InvalidArgumentException('Choose a valid CSV import for this audience.');
+                }
             }
-            $pdo->prepare('INSERT INTO email_sales_campaigns(campaign_name,template_id,lead_import_id,created_by_user_id) VALUES(:name,:template,:import,:user)')
-                ->execute([':name' => $name, ':template' => $templateId, ':import' => $leadImportId, ':user' => $userId]);
+            $filters = [
+                'audience' => $audience,
+                'lead_status' => mb_substr(trim((string) ($_POST['lead_status'] ?? '')), 0, 40),
+                'lead_source' => mb_substr(trim((string) ($_POST['lead_source'] ?? '')), 0, 80),
+                'opportunity_state' => in_array($_POST['opportunity_state'] ?? '', ['', 'open', 'none', 'lost', 'customer'], true) ? (string) ($_POST['opportunity_state'] ?? '') : ''
+            ];
+            $pdo->prepare('INSERT INTO email_sales_campaigns(campaign_name,template_id,lead_import_id,recipient_filter_json,created_by_user_id) VALUES(:name,:template,:import,:filters,:user)')
+                ->execute([':name' => $name, ':template' => $templateId, ':import' => $audience === 'import' ? $leadImportId : null, ':filters' => json_encode($filters), ':user' => $userId]);
             $campaignId = (int) $pdo->lastInsertId();
             $count = (new EmailQueueService($pdo))->queueSalesCampaign($campaignId);
             emailToolsJson(['success' => true, 'message' => "Campaign queued for {$count} lead(s)."]);

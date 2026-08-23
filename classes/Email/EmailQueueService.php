@@ -58,21 +58,36 @@ final class EmailQueueService
 
     public function queueSalesCampaign(int $campaignId): int
     {
-        $this->pdo->beginTransaction();
+        $ownsTransaction = !$this->pdo->inTransaction();
+        if ($ownsTransaction) $this->pdo->beginTransaction();
         try {
             $campaign = $this->lockedRecord('email_sales_campaigns', $campaignId);
             if (!$campaign || !in_array($campaign['status'], ['draft', 'paused'], true)) {
                 throw new InvalidArgumentException('Only draft or paused campaigns can be queued.');
             }
             $leadImportId = (int) ($campaign['lead_import_id'] ?? 0);
-            if ($leadImportId < 1) {
-                throw new InvalidArgumentException('Choose a CSV import before queueing this campaign.');
+            $filters = json_decode((string) ($campaign['recipient_filter_json'] ?? ''), true) ?: [];
+            $audience = in_array($filters['audience'] ?? '', ['all', 'import', 'filtered'], true) ? $filters['audience'] : ($leadImportId ? 'import' : 'all');
+            $joins = ['LEFT JOIN email_suppressions s ON s.email_address=LOWER(TRIM(l.email_address))'];
+            $where = ["l.status='active'", 'l.archived_at IS NULL', 's.id IS NULL'];
+            $params = [];
+            if ($audience === 'import') {
+                if ($leadImportId < 1) throw new InvalidArgumentException('Choose a CSV import before queueing this campaign.');
+                $joins[] = 'INNER JOIN email_lead_import_members m ON m.lead_id=l.id';
+                $where[] = 'm.import_id=:import';
+                $params[':import'] = $leadImportId;
             }
-            $leads = $this->pdo->prepare("SELECT l.* FROM email_lead_import_members m
-                INNER JOIN email_leads l ON l.id=m.lead_id
-                LEFT JOIN email_suppressions s ON s.email_address=l.email_address
-                WHERE m.import_id=:import AND l.status='active' AND s.id IS NULL ORDER BY l.id");
-            $leads->execute([':import' => $leadImportId]);
+            if ($audience === 'filtered') {
+                if (!empty($filters['lead_status'])) { $where[] = 'l.lead_status=:lead_status'; $params[':lead_status'] = mb_substr((string) $filters['lead_status'], 0, 40); }
+                if (!empty($filters['lead_source'])) { $where[] = 'l.lead_source=:lead_source'; $params[':lead_source'] = mb_substr((string) $filters['lead_source'], 0, 80); }
+                $state = (string) ($filters['opportunity_state'] ?? '');
+                if ($state === 'open') $where[] = "EXISTS(SELECT 1 FROM opportunities o WHERE o.lead_id=l.id AND o.archived_at IS NULL AND o.stage NOT IN ('Won','Lost'))";
+                if ($state === 'none') $where[] = 'NOT EXISTS(SELECT 1 FROM opportunities o WHERE o.lead_id=l.id AND o.archived_at IS NULL)';
+                if ($state === 'lost') $where[] = "EXISTS(SELECT 1 FROM opportunities o WHERE o.lead_id=l.id AND o.stage='Lost')";
+                if ($state === 'customer') $where[] = "l.lead_status='Converted'";
+            }
+            $leads = $this->pdo->prepare('SELECT DISTINCT l.* FROM email_leads l ' . implode(' ', $joins) . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY l.id');
+            $leads->execute($params);
             $leads = $leads->fetchAll(PDO::FETCH_ASSOC);
             $insert = $this->pdo->prepare("INSERT IGNORE INTO email_sales_recipients
                 (campaign_id,lead_id,email_address,first_name,last_name,company,unsubscribe_token_hash)
@@ -92,14 +107,14 @@ final class EmailQueueService
                 }
             }
             if ($count === 0 && $campaign['status'] === 'draft') {
-                throw new RuntimeException('No eligible active leads were found in the selected CSV import.');
+                throw new RuntimeException('No eligible leads matched this campaign audience.');
             }
             $this->pdo->prepare("UPDATE email_sales_campaigns SET status='queued',queued_at=COALESCE(queued_at,NOW()),completed_at=NULL WHERE id=:id")
                 ->execute([':id' => $campaignId]);
-            $this->pdo->commit();
+            if ($ownsTransaction) $this->pdo->commit();
             return $count;
         } catch (Throwable $e) {
-            if ($this->pdo->inTransaction()) {
+            if ($ownsTransaction && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
             throw $e;
@@ -259,6 +274,8 @@ final class EmailQueueService
             $this->pdo->prepare('UPDATE email_sales_recipients SET subject_rendered=:subject WHERE id=:id')->execute([':subject' => $subject, ':id' => $recipient['id']]);
             $this->pdo->prepare('UPDATE email_leads SET last_campaign_id=:campaign,last_template_id=:template,last_contacted_at=NOW(),total_emails_sent=total_emails_sent+1 WHERE id=:id')
                 ->execute([':campaign' => $campaign['id'], ':template' => $campaign['template_id'], ':id' => $recipient['lead_id']]);
+            $this->pdo->prepare("INSERT INTO sales_activities(lead_id,campaign_id,activity_type,title,description) VALUES(:lead,:campaign,'email_sent','Sales campaign email sent',:subject)")
+                ->execute([':lead' => $recipient['lead_id'], ':campaign' => $campaign['id'], ':subject' => $subject]);
         } catch (Throwable $e) {
             $this->markRecipient('email_sales_recipients', $recipient, 'failed', $e->getMessage(), 'sales', (int) $campaign['id']);
         }

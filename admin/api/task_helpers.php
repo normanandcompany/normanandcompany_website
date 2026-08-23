@@ -121,7 +121,7 @@ function taskBoundedInt(?string $value, string $fieldName, int $default, int $mi
 
 function taskRecordExists(PDO $pdo, string $table, int $id): bool
 {
-    $allowedTables = ['tasks', 'users'];
+    $allowedTables = ['tasks', 'users', 'email_leads', 'opportunities'];
 
     if (!in_array($table, $allowedTables, true)) {
         throw new InvalidArgumentException('Invalid table lookup.');
@@ -131,6 +131,28 @@ function taskRecordExists(PDO $pdo, string $table, int $id): bool
     $stmt->execute([':id' => $id]);
 
     return (int) $stmt->fetchColumn() > 0;
+}
+
+function taskResolveCrmRelationship(PDO $pdo, ?int $leadId, ?int $opportunityId): array
+{
+    if ($opportunityId !== null) {
+        $stmt = $pdo->prepare('SELECT lead_id FROM opportunities WHERE id=:id AND archived_at IS NULL');
+        $stmt->execute([':id' => $opportunityId]);
+        $opportunityLeadId = $stmt->fetchColumn();
+        if ($opportunityLeadId === false) {
+            throw new InvalidArgumentException('Choose a valid opportunity.');
+        }
+        if ($leadId !== null && $leadId !== (int) $opportunityLeadId) {
+            throw new InvalidArgumentException('The selected opportunity does not belong to the selected lead.');
+        }
+        return [(int) $opportunityLeadId, $opportunityId];
+    }
+
+    if ($leadId !== null && !taskRecordExists($pdo, 'email_leads', $leadId)) {
+        throw new InvalidArgumentException('Choose a valid lead.');
+    }
+
+    return [$leadId, null];
 }
 
 function taskUserIsAdministrator(PDO $pdo, int $userId): bool
@@ -225,6 +247,12 @@ function taskGoogleCalendarUrl(array $task): string
 
     if (!empty($task['task_status'])) {
         $details[] = 'Status: ' . ucwords(str_replace('_', ' ', (string) $task['task_status']));
+    }
+
+    if (!empty($task['opportunity_name'])) {
+        $details[] = 'Opportunity: ' . $task['opportunity_name'];
+    } elseif (!empty($task['lead_name']) || !empty($task['lead_company'])) {
+        $details[] = 'Lead: ' . trim((string) ($task['lead_name'] ?? '') . (!empty($task['lead_company']) ? ' — ' . $task['lead_company'] : ''));
     }
 
     if (($task['recurrence_frequency'] ?? 'none') !== 'none' && (int) ($task['recurrence_count'] ?? 1) > 1) {

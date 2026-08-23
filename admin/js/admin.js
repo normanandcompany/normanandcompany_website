@@ -1,7 +1,7 @@
 // =========================================
 // DYNAMIC PAGE LOADER UX
 // =========================================
-async function loadPage(pageName) {
+async function loadPage(pageName, options = {}) {
 
     try {
         const response = await fetch(
@@ -22,7 +22,8 @@ async function loadPage(pageName) {
 
             // Page loader for home/dashboard data
             case 'home':
-                loadDashboard();
+                await loadDashboard();
+                if (options.contactId) openDashboardContact(options.contactId);
                 break; 
 
             // Page loader for product data
@@ -42,12 +43,25 @@ async function loadPage(pageName) {
 
             // Page loader for task data
             case 'tasks':
-                loadTasks();
+                await loadTasks();
+                if (options.taskId) editTask(options.taskId);
                 break;
 
             // Page loader for transaction data
             case 'transactions':
                 loadTransactions();
+                break;
+
+            case 'leads':
+                initCrmPage('leads');
+                break;
+
+            case 'opportunities':
+                initCrmPage('opportunities');
+                break;
+
+            case 'salesorders':
+                initCrmPage('orders');
                 break;
 
             // Page loader for blog post data
@@ -95,6 +109,199 @@ async function loadPage(pageName) {
     } catch (error) {
         console.error('Error loading page:', error);
     }
+}
+
+// =========================================
+// SALES CRM
+// =========================================
+
+let crmState = { entity: '', page: 1, total: 0, perPage: 25, csrf: '', lookups: {}, records: [] };
+
+function crmEscape(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+}
+
+function crmMoney(value) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+}
+
+function crmDate(value, withTime = false) {
+    if (!value) return '—';
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(date.getTime()) ? crmEscape(value) : new Intl.DateTimeFormat('en-US', withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' }).format(date);
+}
+
+function crmBadge(value) {
+    const className = ['Qualified', 'Won', 'Paid', 'Fulfilled', 'Converted'].includes(value) ? 'active' : ['Disqualified', 'Lost', 'Cancelled', 'Refunded'].includes(value) ? 'danger' : ['Nurturing', 'Awaiting Payment', 'Negotiation'].includes(value) ? 'warning' : 'muted';
+    return `<span class="status-badge ${className}">${crmEscape(value)}</span>`;
+}
+
+async function crmRequest(action, options = {}) {
+    const method = options.method || 'GET';
+    let url = `/admin/api/crm.php?action=${encodeURIComponent(action)}`;
+    const request = { method, cache: 'no-store', headers: { Accept: 'application/json' } };
+    if (method === 'GET') {
+        const params = new URLSearchParams(options.params || {});
+        if ([...params].length) url += `&${params}`;
+    } else {
+        const body = options.body instanceof FormData ? options.body : new FormData();
+        body.set('action', action); body.set('csrf_token', crmState.csrf);
+        request.body = body; request.headers['X-CSRF-Token'] = crmState.csrf;
+    }
+    const response = await fetch(url, request);
+    const data = await response.json().catch(() => ({ success: false, message: 'The CRM returned an invalid response.' }));
+    if (!response.ok || !data.success) {
+        const error = new Error(data.message || 'CRM request failed.'); error.payload = data; throw error;
+    }
+    if (data.csrf_token) crmState.csrf = data.csrf_token;
+    if (data.lookups) crmState.lookups = data.lookups;
+    return data;
+}
+
+function initCrmPage(entity) {
+    const app = document.querySelector('.crm-manager'); if (!app) return;
+    crmState = { entity, page: 1, total: 0, perPage: 25, csrf: '', lookups: {}, records: [] };
+    app.querySelector('[data-crm-filters]')?.addEventListener('submit', event => { event.preventDefault(); crmState.page = 1; crmLoad(); });
+    app.querySelector('[data-crm-prev]')?.addEventListener('click', () => { if (crmState.page > 1) { crmState.page--; crmLoad(); } });
+    app.querySelector('[data-crm-next]')?.addEventListener('click', () => { if (crmState.page * crmState.perPage < crmState.total) { crmState.page++; crmLoad(); } });
+    app.querySelector('[data-crm-open="lead-form"]')?.addEventListener('click', () => crmOpenLeadForm());
+    app.querySelectorAll('[data-dialog-close]').forEach(button => button.addEventListener('click', () => button.closest('dialog')?.close()));
+    app.querySelectorAll('[data-crm-form]').forEach(form => form.addEventListener('submit', crmSubmit));
+    app.addEventListener('click', crmClick);
+    crmLoad();
+}
+
+function crmFilterParams() {
+    const form = document.querySelector('[data-crm-filters]');
+    const params = Object.fromEntries(form ? new FormData(form) : []); params.page = crmState.page; params.per_page = crmState.perPage; return params;
+}
+
+async function crmLoad() {
+    try {
+        const data = await crmRequest(crmState.entity, { params: crmFilterParams() });
+        crmState.records = data.records || []; crmState.total = Number(data.total || 0); crmState.page = Number(data.page || 1); crmState.perPage = Number(data.per_page || 25);
+        crmPopulateLookups(); crmRenderRows();
+        const page = document.querySelector('[data-crm-page]'); if (page) page.textContent = `Page ${crmState.page} of ${Math.max(1, Math.ceil(crmState.total / crmState.perPage))}`;
+        const summary = document.querySelector('[data-crm-summary]'); if (summary) summary.innerHTML = `<strong>${crmState.total}</strong><span>${crmEscape(crmState.entity === 'orders' ? 'sales orders' : crmState.entity)}</span>`;
+        document.querySelector('[data-crm-prev]')?.toggleAttribute('disabled', crmState.page <= 1);
+        document.querySelector('[data-crm-next]')?.toggleAttribute('disabled', crmState.page * crmState.perPage >= crmState.total);
+    } catch (error) { crmAlert(error.message, true); }
+}
+
+function crmPopulateLookups() {
+    document.querySelectorAll('[data-lookup]').forEach(select => {
+        if (select.dataset.loaded) return;
+        (crmState.lookups[select.dataset.lookup] || []).forEach(value => select.add(new Option(value, value)));
+        select.dataset.loaded = '1';
+    });
+    document.querySelectorAll('[data-user-options]').forEach(select => {
+        if (select.dataset.loaded) return;
+        (crmState.lookups.users || []).forEach(user => select.add(new Option(user.name, user.id)));
+        select.dataset.loaded = '1';
+    });
+}
+
+function crmRenderRows() {
+    const body = document.querySelector('[data-crm-rows]'); if (!body) return;
+    if (!crmState.records.length) { body.innerHTML = `<tr><td colspan="7" class="product-empty-state">No matching records.</td></tr>`; return; }
+    if (crmState.entity === 'leads') body.innerHTML = crmState.records.map(lead => `<tr data-id="${lead.id}"><td><button class="crm-link" data-crm-detail-type="lead" data-id="${lead.id}"><strong>${crmEscape(`${lead.first_name} ${lead.last_name || ''}`.trim())}</strong></button><small>${crmEscape(lead.email_address)}</small></td><td>${crmEscape(lead.company || '—')}<small>${crmEscape(lead.job_title || '')}</small></td><td>${crmBadge(lead.lead_status)}</td><td>${crmEscape(lead.lead_source)}</td><td>${crmEscape(lead.assigned_user_name || 'Unassigned')}<small>Follow-up: ${crmDate(lead.next_follow_up_at, true)}</small></td><td>${lead.suppression_reason || lead.status !== 'active' ? crmBadge('Suppressed') : crmBadge('Eligible')}<small>${lead.total_emails_sent || 0} sent</small></td><td><button class="btn-secondary btn-small" data-edit-lead="${lead.id}">Edit</button></td></tr>`).join('');
+    if (crmState.entity === 'opportunities') body.innerHTML = crmState.records.map(item => `<tr><td><button class="crm-link" data-crm-detail-type="opportunity" data-id="${item.id}"><strong>${crmEscape(item.opportunity_name)}</strong></button><small>#${item.id}</small></td><td>${crmEscape(`${item.first_name} ${item.last_name || ''}`.trim())}<small>${crmEscape(item.company || item.email_address)}</small></td><td>${crmBadge(item.stage)}</td><td>${Number(item.probability)}%</td><td>${crmMoney(item.estimated_value)}</td><td>${crmDate(item.expected_close_date)}</td><td>${item.item_count} product(s)<small>${item.order_count} order(s)</small></td></tr>`).join('');
+    if (crmState.entity === 'orders') body.innerHTML = crmState.records.map(order => `<tr><td><button class="crm-link" data-crm-detail-type="order" data-id="${order.id}"><strong>${crmEscape(order.order_number)}</strong></button></td><td>${crmEscape(order.contact_name_snapshot)}<small>${crmEscape(order.company_snapshot || order.email_snapshot)}</small></td><td>${crmEscape(order.opportunity_name || 'Direct')}</td><td>${crmBadge(order.status)}</td><td>${crmMoney(order.grand_total)}</td><td>${crmDate(order.created_at)}</td><td>${order.transaction_id ? `Transaction #${order.transaction_id}` : 'Unpaid'}</td></tr>`).join('');
+}
+
+function crmOpenLeadForm(record = {}) {
+    const dialog = document.querySelector('[data-crm-dialog="lead-form"]'); const form = dialog?.querySelector('form'); if (!form) return;
+    form.reset(); crmPopulateLookups();
+    ['id','first_name','last_name','company','job_title','email_address','phone','lead_status','lead_source','assigned_user_id','priority','qualification_score','notes'].forEach(name => { if (form.elements[name]) form.elements[name].value = record[name] ?? ''; });
+    if (record.next_follow_up_at) form.elements.next_follow_up_at.value = String(record.next_follow_up_at).replace(' ', 'T').slice(0, 16);
+    form.querySelector('[data-form-title]').textContent = record.id ? 'Edit Lead' : 'Create Lead'; dialog.showModal();
+}
+
+async function crmClick(event) {
+    const edit = event.target.closest('[data-edit-lead]'); if (edit) { crmOpenLeadForm(crmState.records.find(item => String(item.id) === edit.dataset.editLead) || {}); return; }
+    const detail = event.target.closest('[data-crm-detail-type]'); if (detail) { await crmShowDetail(detail.dataset.crmDetailType, Number(detail.dataset.id)); return; }
+    const action = event.target.closest('[data-crm-action]'); if (!action) return;
+    const name = action.dataset.crmAction; const id = Number(action.dataset.id); const body = new FormData();
+    try {
+        if (name === 'qualify_lead') { const notes = prompt('Qualification notes (optional):', ''); if (notes === null) return; body.set('id', id); body.set('qualification_notes', notes); }
+        else if (name === 'disqualify_lead') { const reason = prompt('Disqualification reason (required):', ''); if (!reason) return; body.set('id', id); body.set('reason', reason); }
+        else if (name === 'archive_lead') { if (!confirm('Archive this lead? Historical activity will be retained.')) return; body.set('id', id); }
+        else if (name === 'add_note') { const note = prompt('Add note:', ''); if (!note) return; body.set('id', id); body.set('note', note); }
+        else if (name === 'create_opportunity') { const opportunityName = prompt('Opportunity name:', action.dataset.defaultName || ''); if (!opportunityName) return; body.set('lead_id', id); body.set('opportunity_name', opportunityName); body.set('estimated_value', '0'); body.set('probability', '10'); }
+        else if (name === 'create_task') { const form = action.closest('form'); if (!form?.reportValidity()) return; new FormData(form).forEach((value,key) => body.set(key,value)); }
+        else if (name === 'set_opportunity_stage') { const stage = action.closest('form').elements.stage.value; let reason = ''; if (stage === 'Lost') { reason = prompt('Loss reason (required):', '') || ''; if (!reason) return; } body.set('id', id); body.set('stage', stage); body.set('reason', reason); }
+        else if (name === 'save_opportunity') { const form = action.closest('form'); new FormData(form).forEach((value,key) => body.set(key,value)); body.set('id', id); }
+        else if (name === 'save_opportunity_item') { const form = action.closest('form'); new FormData(form).forEach((value,key) => body.set(key,value)); body.set('opportunity_id', id); }
+        else if (name === 'create_sales_order') { if (!confirm('Create a draft sales order using the current product pricing?')) return; body.set('opportunity_id', id); body.set('tax_total', action.closest('form').elements.tax_total.value || '0'); body.set('shipping_total', action.closest('form').elements.shipping_total.value || '0'); body.set('internal_notes', action.closest('form').elements.internal_notes.value || ''); }
+        else if (name === 'change_order_status') { const status = action.closest('form').elements.status.value; if (['Cancelled','Refunded'].includes(status) && !confirm(`Move this order to ${status}?`)) return; body.set('id', id); body.set('status', status); }
+        else if (name === 'save_draft_order') { const form = action.closest('form'); new FormData(form).forEach((value,key) => body.set(key,value)); body.set('id', id); }
+        else if (name === 'record_payment') { const reference = prompt('Unique payment reference (required):', ''); if (!reference) return; const provider = prompt('Payment provider:', 'manual') || 'manual'; if (!confirm('Confirm that payment succeeded and create the transaction?')) return; body.set('id', id); body.set('transaction_reference', reference); body.set('payment_provider', provider); }
+        const data = await crmRequest(name, { method: 'POST', body }); crmAlert(data.message); document.querySelector('dialog[open]')?.close(); await crmLoad();
+    } catch (error) { crmAlert(error.message, true); }
+}
+
+async function crmSubmit(event) {
+    event.preventDefault(); const form = event.currentTarget; const button = event.submitter; if (button) button.disabled = true;
+    try { const data = await crmRequest(form.dataset.crmForm, { method: 'POST', body: new FormData(form) }); form.closest('dialog')?.close(); crmAlert(data.message); await crmLoad(); }
+    catch (error) { crmAlert(error.payload?.duplicate ? `${error.message} Existing lead #${error.payload.duplicate.id}.` : error.message, true); }
+    finally { if (button) button.disabled = false; }
+}
+
+async function crmShowDetail(type, id) {
+    try {
+        const data = await crmRequest(`${type}_detail`, { params: { id } });
+        const dialog = document.querySelector(`[data-crm-dialog="${type}-detail"]`); const target = dialog?.querySelector('[data-crm-detail]'); if (!target) return;
+        if (type === 'lead') target.innerHTML = crmLeadDetailHtml(data);
+        if (type === 'opportunity') target.innerHTML = crmOpportunityDetailHtml(data);
+        if (type === 'order') target.innerHTML = crmOrderDetailHtml(data);
+        target.querySelector('[data-dialog-close]')?.addEventListener('click', () => dialog.close()); dialog.showModal();
+    } catch (error) { crmAlert(error.message, true); }
+}
+
+function crmTimeline(items) {
+    if (!items?.length) return '<p class="crm-empty">No activity recorded.</p>';
+    return `<ol class="crm-timeline">${items.map(item => `<li><strong>${crmEscape(item.title)}</strong><span>${crmDate(item.created_at, true)}${item.user_name ? ` · ${crmEscape(item.user_name)}` : ''}</span>${item.description ? `<p>${crmEscape(item.description)}</p>` : ''}</li>`).join('')}</ol>`;
+}
+
+function crmDetailHeader(kicker, title) {
+    return `<header class="product-dialog-header"><div><p class="section-kicker">${crmEscape(kicker)}</p><h2>${crmEscape(title)}</h2></div><button type="button" class="product-dialog-close" data-dialog-close>&times;</button></header>`;
+}
+
+function crmTaskList(tasks) {
+    if (!tasks?.length) return '<p class="crm-empty">No related tasks.</p>';
+    return `<div class="product-table-scroll"><table class="product-table"><thead><tr><th>Task</th><th>Assigned To</th><th>Status</th><th>Priority</th><th>Due</th></tr></thead><tbody>${tasks.map(task => `<tr><td><strong>${crmEscape(task.title)}</strong>${task.opportunity_name ? `<small>Opportunity: ${crmEscape(task.opportunity_name)}</small>` : ''}</td><td>${crmEscape(task.assigned_to)}</td><td>${crmBadge(formatTaskLabel(task.task_status))}</td><td>${crmEscape(formatTaskLabel(task.priority))}</td><td>${crmDate(task.due_at, true)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function crmTaskForm({ leadId, opportunityId = '', ownerId = '', subject = '' }) {
+    const users = crmState.lookups.users || [];
+    const selectedOwner = String(ownerId || users[0]?.id || '');
+    const owners = users.map(user => `<option value="${user.id}"${String(user.id) === selectedOwner ? ' selected' : ''}>${crmEscape(user.name)}</option>`).join('');
+    return `<form class="crm-form-grid crm-task-form"><input type="hidden" name="lead_id" value="${crmEscape(leadId)}"><input type="hidden" name="opportunity_id" value="${crmEscape(opportunityId)}"><label class="crm-span">Task title<input name="title" maxlength="255" value="${crmEscape(subject)}" required></label><label>Assigned user<select name="user_id" required>${owners}</select></label><label>Due date<input name="due_at" type="datetime-local"></label><label>Priority<select name="priority"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label><label class="crm-span">Description<textarea name="description" rows="2"></textarea></label><button type="button" class="btn-primary" data-crm-action="create_task" data-id="${crmEscape(opportunityId || leadId)}">Create Task</button></form>`;
+}
+
+function crmLeadDetailHtml(data) {
+    const lead = data.lead;
+    return `${crmDetailHeader('Lead detail', `${lead.first_name} ${lead.last_name || ''}`.trim())}<div class="crm-detail-actions"><button class="btn-secondary" data-crm-action="add_note" data-id="${lead.id}">Add Note</button>${lead.lead_status !== 'Qualified' ? `<button class="btn-primary" data-crm-action="qualify_lead" data-id="${lead.id}">Qualify</button>` : `<button class="btn-primary" data-crm-action="create_opportunity" data-id="${lead.id}" data-default-name="${crmEscape(lead.company || `${lead.first_name} opportunity`)}">Create Opportunity</button>`}<button class="btn-secondary" data-crm-action="disqualify_lead" data-id="${lead.id}">Disqualify</button><button class="btn-danger" data-crm-action="archive_lead" data-id="${lead.id}">Archive</button></div>
+    <div class="crm-detail-grid"><section><h3>Contact Information</h3><dl><dt>Company</dt><dd>${crmEscape(lead.company || '—')}</dd><dt>Email</dt><dd><a href="mailto:${crmEscape(lead.email_address)}">${crmEscape(lead.email_address)}</a></dd><dt>Phone</dt><dd>${crmEscape(lead.phone || '—')}</dd><dt>Job title</dt><dd>${crmEscape(lead.job_title || '—')}</dd></dl></section><section><h3>Sales Information</h3><dl><dt>Status</dt><dd>${crmBadge(lead.lead_status)}</dd><dt>Owner</dt><dd>${crmEscape(lead.assigned_user_name || 'Unassigned')}</dd><dt>Source</dt><dd>${crmEscape(lead.lead_source)}</dd><dt>Priority / score</dt><dd>${crmEscape(lead.priority)} / ${lead.qualification_score ?? '—'}</dd><dt>Next follow-up</dt><dd>${crmDate(lead.next_follow_up_at, true)}</dd><dt>Email eligibility</dt><dd>${lead.suppression_reason || lead.status !== 'active' ? crmBadge('Suppressed') : crmBadge('Eligible')}</dd></dl></section></div>
+    <section><h3>Tasks</h3>${crmTaskList(data.tasks)}<h4>Create a task for this lead</h4>${crmTaskForm({ leadId: lead.id, ownerId: lead.assigned_user_id, subject: `Follow up with ${`${lead.first_name} ${lead.last_name || ''}`.trim()}` })}</section>
+    <section><h3>Opportunities</h3>${data.opportunities.length ? `<div class="product-table-scroll"><table class="product-table"><tbody>${data.opportunities.map(o => `<tr><td>${crmEscape(o.opportunity_name)}</td><td>${crmBadge(o.stage)}</td><td>${crmMoney(o.estimated_value)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="crm-empty">No opportunities.</p>'}</section>
+    <section><h3>Email Campaigns</h3>${data.campaign_history.length ? `<div class="product-table-scroll"><table class="product-table"><tbody>${data.campaign_history.map(c => `<tr><td>${crmEscape(c.campaign_name)}</td><td>${crmEscape(c.template_name)}</td><td>${crmBadge(c.status)}</td><td>${crmDate(c.sent_at, true)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="crm-empty">No campaign history.</p>'}</section><section><h3>Activity Timeline</h3>${crmTimeline(data.activities)}</section>`;
+}
+
+function crmOpportunityDetailHtml(data) {
+    const o = data.opportunity; const options = (crmState.lookups.opportunity_stages || []).map(stage => `<option${stage === o.stage ? ' selected' : ''}>${crmEscape(stage)}</option>`).join(''); const products = (crmState.lookups.products || []).map(p => `<option value="${p.id}" data-price="${p.price}">${crmEscape(p.product_name)} (${crmMoney(p.price)})</option>`).join(''); const owners = `<option value="">Unassigned</option>${(crmState.lookups.users || []).map(user => `<option value="${user.id}"${String(user.id) === String(o.assigned_user_id || '') ? ' selected' : ''}>${crmEscape(user.name)}</option>`).join('')}`;
+    return `${crmDetailHeader('Opportunity detail', o.opportunity_name)}<div class="crm-detail-grid"><section><h3>Lead</h3><dl><dt>Contact</dt><dd>${crmEscape(`${o.first_name} ${o.last_name || ''}`.trim())}</dd><dt>Company</dt><dd>${crmEscape(o.company || '—')}</dd><dt>Email</dt><dd>${crmEscape(o.email_address)}</dd><dt>Campaign</dt><dd>${crmEscape(o.campaign_name || '—')}</dd></dl></section><section><h3>Pipeline</h3><dl><dt>Stage</dt><dd>${crmBadge(o.stage)}</dd><dt>Probability</dt><dd>${o.probability}%</dd><dt>Estimated value</dt><dd>${crmMoney(o.estimated_value)}</dd><dt>Expected close</dt><dd>${crmDate(o.expected_close_date)}</dd></dl><form class="crm-inline-form"><select name="stage">${options}</select><button type="button" class="btn-secondary" data-crm-action="set_opportunity_stage" data-id="${o.id}">Change Stage</button></form></section></div>
+    <section><h3>Edit Opportunity</h3><form class="crm-form-grid"><label>Name<input name="opportunity_name" value="${crmEscape(o.opportunity_name)}" required></label><label>Owner<select name="assigned_user_id">${owners}</select></label><label>Probability<input name="probability" type="number" min="0" max="100" value="${Number(o.probability)}"></label><label>Expected close<input name="expected_close_date" type="date" value="${crmEscape(o.expected_close_date || '')}"></label><label class="crm-span">Description<textarea name="description" rows="2">${crmEscape(o.description || '')}</textarea></label><label class="crm-span">Notes<textarea name="notes" rows="2">${crmEscape(o.notes || '')}</textarea></label><button type="button" class="btn-secondary" data-crm-action="save_opportunity" data-id="${o.id}">Save Opportunity</button></form></section><section><h3>Tasks</h3>${crmTaskList(data.tasks)}<h4>Create a task for this opportunity</h4>${crmTaskForm({ leadId: o.lead_id, opportunityId: o.id, ownerId: o.assigned_user_id, subject: `Follow up: ${o.opportunity_name}` })}</section><section><h3>Products</h3>${data.items.length ? `<div class="product-table-scroll"><table class="product-table"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Discount</th><th>Total</th></tr></thead><tbody>${data.items.map(i => `<tr><td>${crmEscape(i.product_name)}<small>${crmEscape(i.sku || i.isbn || '')}</small></td><td>${i.quantity}</td><td>${crmMoney(i.proposed_unit_price)}</td><td>${crmMoney(i.discount_amount)}</td><td>${crmMoney(i.line_total)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="crm-empty">No products added.</p>'}<form class="crm-inline-form crm-product-form"><select name="product_id" required><option value="">Choose product</option>${products}</select><input name="quantity" type="number" min="1" value="1" required><input name="proposed_unit_price" type="number" min="0" step="0.01" placeholder="Unit price" required><input name="discount_amount" type="number" min="0" step="0.01" value="0"><button type="button" class="btn-primary" data-crm-action="save_opportunity_item" data-id="${o.id}">Add / Update</button></form></section>
+    <section><h3>Sales Orders</h3>${data.orders.length ? data.orders.map(order => `<p><strong>${crmEscape(order.order_number)}</strong> ${crmBadge(order.status)} · ${crmMoney(order.grand_total)}</p>`).join('') : '<p class="crm-empty">No sales orders.</p>'}<form class="crm-inline-form"><input name="tax_total" type="number" min="0" step="0.01" value="0" aria-label="Tax"><input name="shipping_total" type="number" min="0" step="0.01" value="0" aria-label="Shipping"><input name="internal_notes" placeholder="Internal notes"><button type="button" class="btn-primary" data-crm-action="create_sales_order" data-id="${o.id}">Create Sales Order</button></form></section><section><h3>Activity Timeline</h3>${crmTimeline(data.activities)}</section>`;
+}
+
+function crmOrderDetailHtml(data) {
+    const o = data.order; const options = (crmState.lookups.order_statuses || []).map(status => `<option${status === o.status ? ' selected' : ''}>${crmEscape(status)}</option>`).join('');
+    return `<div class="crm-print-order">${crmDetailHeader('Sales order', o.order_number)}<div class="crm-detail-actions"><button class="btn-secondary" type="button" onclick="window.print()">Print</button>${!o.transaction_id ? `<button class="btn-primary" data-crm-action="record_payment" data-id="${o.id}">Record Payment</button>` : ''}</div><div class="crm-detail-grid"><section><h3>Customer Snapshot</h3><dl><dt>Contact</dt><dd>${crmEscape(o.contact_name_snapshot)}</dd><dt>Company</dt><dd>${crmEscape(o.company_snapshot || '—')}</dd><dt>Email</dt><dd>${crmEscape(o.email_snapshot)}</dd><dt>Phone</dt><dd>${crmEscape(o.phone_snapshot || '—')}</dd><dt>Billing</dt><dd>${crmEscape(o.billing_address_snapshot || '—')}</dd><dt>Shipping</dt><dd>${crmEscape(o.shipping_address_snapshot || '—')}</dd></dl></section><section><h3>Order</h3><dl><dt>Status</dt><dd>${crmBadge(o.status)}</dd><dt>Opportunity</dt><dd>${crmEscape(o.opportunity_name || 'Direct')}</dd><dt>Campaign</dt><dd>${crmEscape(o.campaign_name || '—')}</dd><dt>Transaction</dt><dd>${o.transaction_id ? `#${o.transaction_id} · ${crmEscape(o.transaction_reference)}` : 'Unpaid'}</dd></dl><form class="crm-inline-form"><select name="status">${options}</select><button type="button" class="btn-secondary" data-crm-action="change_order_status" data-id="${o.id}">Change Status</button></form></section></div><section><h3>Items</h3><div class="product-table-scroll"><table class="product-table"><thead><tr><th>Product snapshot</th><th>Qty</th><th>Unit price</th><th>Discount</th><th>Line total</th></tr></thead><tbody>${data.items.map(i => `<tr><td>${crmEscape(i.product_name_snapshot)}<small>${crmEscape(i.sku_snapshot || i.isbn_snapshot || '')}</small></td><td>${i.quantity}</td><td>${crmMoney(i.unit_price)}</td><td>${crmMoney(i.discount_amount)}</td><td>${crmMoney(i.line_total)}</td></tr>`).join('')}</tbody><tfoot><tr><th colspan="4">Subtotal</th><td>${crmMoney(o.subtotal)}</td></tr><tr><th colspan="4">Discount</th><td>-${crmMoney(o.discount_total)}</td></tr><tr><th colspan="4">Tax</th><td>${crmMoney(o.tax_total)}</td></tr><tr><th colspan="4">Shipping</th><td>${crmMoney(o.shipping_total)}</td></tr><tr><th colspan="4">Grand total</th><td><strong>${crmMoney(o.grand_total)}</strong></td></tr></tfoot></table></div></section>${o.status === 'Draft' ? `<section><h3>Edit Draft</h3><form class="crm-form-grid"><label>Tax<input name="tax_total" type="number" min="0" step="0.01" value="${crmEscape(o.tax_total)}"></label><label>Shipping<input name="shipping_total" type="number" min="0" step="0.01" value="${crmEscape(o.shipping_total)}"></label><label class="crm-span">Billing address<textarea name="billing_address_snapshot">${crmEscape(o.billing_address_snapshot || '')}</textarea></label><label class="crm-span">Shipping address<textarea name="shipping_address_snapshot">${crmEscape(o.shipping_address_snapshot || '')}</textarea></label><label class="crm-span">Customer notes<textarea name="customer_notes">${crmEscape(o.customer_notes || '')}</textarea></label><label class="crm-span">Internal notes<textarea name="internal_notes">${crmEscape(o.internal_notes || '')}</textarea></label><button type="button" class="btn-secondary" data-crm-action="save_draft_order" data-id="${o.id}">Save Draft</button></form></section>` : ''}<section><h3>Activity Timeline</h3>${crmTimeline(data.activities)}</section></div>`;
+}
+
+function crmAlert(message, error = false) {
+    const alert = document.querySelector('.crm-alert'); if (!alert) return; alert.textContent = message; alert.classList.toggle('is-error', error); alert.classList.toggle('is-success', !error); alert.hidden = false;
 }
 
 // =========================================
@@ -462,7 +669,9 @@ async function loadDashboard() {
         renderDashboardProductViewLists(dashboard);
         renderDashboardReviewProductList(dashboard);
         renderDashboardReviewTable(dashboard);
+        renderDashboardAlerts(dashboard);
         renderDashboardContacts(dashboard);
+        bindDashboardContactActions();
 
     } catch (err) {
 
@@ -471,6 +680,57 @@ async function loadDashboard() {
     }
 
     initCloudflareAnalyticsDashboard();
+}
+
+function renderDashboardAlerts(dashboard) {
+    const container = document.getElementById('dashboardAlerts');
+    const list = document.getElementById('dashboardAlertList');
+    if (!container || !list) return;
+
+    const alerts = Array.isArray(dashboard?.overdue_alerts) ? dashboard.overdue_alerts : [];
+    container.classList.toggle('is-clear', alerts.length === 0);
+
+    if (alerts.length === 0) {
+        list.innerHTML = '<p class="dashboard-alert-empty">No overdue tasks or contact requests.</p>';
+        return;
+    }
+
+    list.innerHTML = alerts.map((alert) => {
+        const type = alert.alert_type === 'contact' ? 'Contact' : 'Task';
+        const target = alert.alert_type === 'contact' ? 'contact' : 'task';
+        const subject = String(alert.title || `${type} #${alert.id}`).trim();
+        const owner = String(alert.assigned_to || '').trim();
+        const href = target === 'contact' ? `#contact-request-${alert.id}` : `#task-${alert.id}`;
+        const meta = [owner, `Due ${formatDashboardDateTime(alert.due_at)}`].filter(Boolean).join(' · ');
+
+        return `<article class="dashboard-alert-item" role="listitem"><a class="dashboard-alert-link" href="${href}" data-dashboard-alert-target="${target}" data-alert-id="${adminEscapeHtml(alert.id)}"><strong>${adminEscapeHtml(subject)}</strong><span class="dashboard-alert-meta">${adminEscapeHtml(meta)}</span></a><span class="dashboard-alert-type">${type}</span></article>`;
+    }).join('');
+
+    if (list.dataset.bound !== 'true') {
+        list.dataset.bound = 'true';
+        list.addEventListener('click', async (event) => {
+            const link = event.target.closest('[data-dashboard-alert-target]');
+            if (!link) return;
+            event.preventDefault();
+            const id = Number.parseInt(link.dataset.alertId || '0', 10);
+            if (!id) return;
+            if (link.dataset.dashboardAlertTarget === 'task') {
+                await loadPage('tasks', { taskId: id });
+            } else {
+                openDashboardContact(id);
+            }
+        });
+    }
+}
+
+function openDashboardContact(id) {
+    activateDashboardTab('contacts');
+    const row = document.getElementById(`contact-request-${id}`);
+    if (!row) return;
+    row.classList.remove('is-alert-target');
+    void row.offsetWidth;
+    row.classList.add('is-alert-target');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function renderDashboardFields(dashboard) {
@@ -744,7 +1004,7 @@ function renderDashboardContacts(dashboard) {
     if (rows.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="4" class="product-empty-state">
+                <td colspan="6" class="product-empty-state">
                     No contact form submissions recorded.
                 </td>
             </tr>
@@ -758,6 +1018,7 @@ function renderDashboardContacts(dashboard) {
         const message = String(contact.message || '').trim() || 'No message provided.';
         const email = String(contact.email_address || '').trim();
         const phone = String(contact.phone_number || '').trim();
+        const status = String(contact.contact_status || 'new');
         const emailLink = email
             ? `<a href="mailto:${encodeURIComponent(email)}">${adminEscapeHtml(email)}</a>`
             : '<span class="dashboard-contact-unavailable">No email provided</span>';
@@ -766,7 +1027,7 @@ function renderDashboardContacts(dashboard) {
             : '<span class="dashboard-contact-unavailable">No phone provided</span>';
 
         return `
-            <tr>
+            <tr id="contact-request-${adminEscapeHtml(contact.id)}">
                 <td>
                     <strong class="dashboard-contact-name">${adminEscapeHtml(fullName)}</strong>
                 </td>
@@ -782,10 +1043,46 @@ function renderDashboardContacts(dashboard) {
                         ${phoneLink}
                     </div>
                 </td>
+                <td>${getDashboardContactStatusBadge(status)}</td>
                 <td>${formatDashboardDateTime(contact.created_at)}</td>
+                <td><div class="product-actions">${status === 'new' ? `<button type="button" class="table-action" data-contact-status-action="in_progress" data-contact-id="${adminEscapeHtml(contact.id)}">Start</button>` : ''}${status !== 'resolved' ? `<button type="button" class="table-action" data-contact-status-action="resolved" data-contact-id="${adminEscapeHtml(contact.id)}">Resolve</button>` : `<button type="button" class="table-action" data-contact-status-action="new" data-contact-id="${adminEscapeHtml(contact.id)}">Reopen</button>`}</div></td>
             </tr>
         `;
     }).join('');
+}
+
+function getDashboardContactStatusBadge(status) {
+    const normalized = ['new', 'in_progress', 'resolved'].includes(status) ? status : 'new';
+    const className = normalized === 'resolved' ? 'active' : (normalized === 'in_progress' ? 'warning' : 'role-badge');
+    return `<span class="status-badge ${className}">${adminEscapeHtml(formatTaskLabel(normalized))}</span>`;
+}
+
+function bindDashboardContactActions() {
+    const body = document.getElementById('dashboardContactsBody');
+    if (!body || body.dataset.bound === 'true') return;
+    body.dataset.bound = 'true';
+    body.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-contact-status-action]');
+        if (!button) return;
+        const id = Number.parseInt(button.dataset.contactId || '0', 10);
+        const contactStatus = button.dataset.contactStatusAction || '';
+        if (!id || !contactStatus) return;
+        button.disabled = true;
+        try {
+            await fetchAdminJson('/admin/api/updateContactStatus.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, contact_status: contactStatus })
+            });
+            await loadDashboard();
+            activateDashboardTab('contacts');
+            openDashboardContact(id);
+        } catch (error) {
+            console.error('Unable to update contact request:', error);
+            window.alert(error.message || 'Unable to update contact request.');
+            button.disabled = false;
+        }
+    });
 }
 
 function formatDashboardDateTime(value) {
@@ -912,6 +1209,8 @@ const taskManagerState = {
     tasks: [],
     filteredTasks: [],
     users: [],
+    leads: [],
+    opportunities: [],
     currentPage: 1,
     perPage: 10
 };
@@ -4018,16 +4317,20 @@ async function loadTasks() {
     setTaskTableLoading();
 
     try {
-        const [tasks, users] = await Promise.all([
+        const [tasks, users, relations] = await Promise.all([
             fetchAdminJson('/admin/api/getTasks.php'),
-            fetchAdminJson('/admin/api/getTaskUsers.php')
+            fetchAdminJson('/admin/api/getTaskUsers.php'),
+            fetchAdminJson('/admin/api/getTaskRelations.php')
         ]);
 
         taskManagerState.tasks = Array.isArray(tasks) ? tasks : [];
         taskManagerState.users = Array.isArray(users) ? users : [];
+        taskManagerState.leads = Array.isArray(relations?.leads) ? relations.leads : [];
+        taskManagerState.opportunities = Array.isArray(relations?.opportunities) ? relations.opportunities : [];
         taskManagerState.currentPage = 1;
 
         populateTaskUserControls();
+        populateTaskRelationControls();
         applyTaskFilters();
     } catch (error) {
         console.error('Error loading tasks:', error);
@@ -4055,6 +4358,8 @@ function bindTaskManagerEvents() {
         document.getElementById('taskUserId'),
         document.getElementById('taskDueAt'),
         document.getElementById('taskStatus'),
+        document.getElementById('taskLeadId'),
+        document.getElementById('taskOpportunityId'),
         document.getElementById('taskRecurring'),
         document.getElementById('taskRecurrenceFrequency'),
         document.getElementById('taskRecurrenceInterval'),
@@ -4130,6 +4435,8 @@ function bindTaskManagerEvents() {
         field?.addEventListener('change', updateTaskPreview);
     });
     document.getElementById('taskRecurring')?.addEventListener('change', toggleTaskRecurrenceFields);
+    document.getElementById('taskLeadId')?.addEventListener('change', filterTaskOpportunityOptions);
+    document.getElementById('taskOpportunityId')?.addEventListener('change', syncTaskLeadFromOpportunity);
 }
 
 function setTaskTableLoading(message = 'Loading tasks...') {
@@ -4139,7 +4446,7 @@ function setTaskTableLoading(message = 'Loading tasks...') {
 
     tbody.innerHTML = `
         <tr>
-            <td colspan="7" class="product-empty-state">
+            <td colspan="8" class="product-empty-state">
                 ${adminEscapeHtml(message)}
             </td>
         </tr>
@@ -4201,6 +4508,46 @@ function populateTaskUserControls() {
             ${userOptions}
         `;
     }
+}
+
+function getTaskLeadLabel(lead) {
+    const name = `${lead?.first_name || ''} ${lead?.last_name || ''}`.trim();
+    return [lead?.company, name, lead?.email_address].filter(Boolean).join(' — ') || `Lead #${lead?.id || ''}`;
+}
+
+function populateTaskRelationControls() {
+    const leadSelect = document.getElementById('taskLeadId');
+    const opportunitySelect = document.getElementById('taskOpportunityId');
+    if (leadSelect) {
+        leadSelect.innerHTML = `<option value="">No lead</option>${taskManagerState.leads.map(lead => `<option value="${adminEscapeHtml(lead.id)}">${adminEscapeHtml(getTaskLeadLabel(lead))}</option>`).join('')}`;
+    }
+    if (opportunitySelect) {
+        opportunitySelect.innerHTML = `<option value="">No opportunity</option>${taskManagerState.opportunities.map(opportunity => `<option value="${adminEscapeHtml(opportunity.id)}" data-lead-id="${adminEscapeHtml(opportunity.lead_id)}">${adminEscapeHtml(opportunity.opportunity_name)}</option>`).join('')}`;
+    }
+}
+
+function filterTaskOpportunityOptions() {
+    const leadSelect = document.getElementById('taskLeadId');
+    const opportunitySelect = document.getElementById('taskOpportunityId');
+    if (!opportunitySelect) return;
+    const leadId = String(leadSelect?.value || '');
+    [...opportunitySelect.options].forEach(option => {
+        option.hidden = Boolean(leadId && option.value && option.dataset.leadId !== leadId);
+    });
+    const selected = opportunitySelect.selectedOptions?.[0];
+    if (selected?.hidden) opportunitySelect.value = '';
+    updateTaskPreview();
+}
+
+function syncTaskLeadFromOpportunity() {
+    const leadSelect = document.getElementById('taskLeadId');
+    const opportunitySelect = document.getElementById('taskOpportunityId');
+    const selected = opportunitySelect?.selectedOptions?.[0];
+    if (leadSelect && selected?.value && selected.dataset.leadId) {
+        leadSelect.value = selected.dataset.leadId;
+        filterTaskOpportunityOptions();
+    }
+    updateTaskPreview();
 }
 
 function formatTaskLabel(value) {
@@ -4267,7 +4614,11 @@ function applyTaskFilters() {
             task.priority,
             task.recurrence_frequency,
             task.assigned_to,
-            task.assigned_email
+            task.assigned_email,
+            task.lead_name,
+            task.lead_company,
+            task.lead_email,
+            task.opportunity_name
         ].join(' ').toLowerCase();
         const matchesSearch = !searchValue || searchable.includes(searchValue);
 
@@ -4361,7 +4712,7 @@ function renderTasks() {
     if (pageTasks.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="product-empty-state">
+                <td colspan="8" class="product-empty-state">
                     No tasks found.
                 </td>
             </tr>
@@ -4397,6 +4748,12 @@ function renderTasks() {
                     <div class="task-user-cell">
                         <strong>${adminEscapeHtml(task.assigned_to || 'Unassigned')}</strong>
                         <small>${adminEscapeHtml(task.assigned_email || '')}</small>
+                    </div>
+                </td>
+                <td>
+                    <div class="task-user-cell">
+                        <strong>${adminEscapeHtml(task.opportunity_name || task.lead_company || task.lead_name || 'Not linked')}</strong>
+                        <small>${task.opportunity_name ? `Opportunity · ${adminEscapeHtml(task.lead_company || task.lead_name || '')}` : (task.lead_id ? 'Lead' : '')}</small>
                     </div>
                 </td>
                 <td>${getTaskPriorityBadge(task.priority)}</td>
@@ -4505,6 +4862,9 @@ function openTaskForm(task = null) {
     setTaskFormValue('taskId', task?.id || '');
     setTaskFormValue('taskTitle', task?.title || '');
     setTaskFormValue('taskUserId', task?.user_id || defaultUserId);
+    setTaskFormValue('taskLeadId', task?.lead_id || '');
+    setTaskFormValue('taskOpportunityId', task?.opportunity_id || '');
+    filterTaskOpportunityOptions();
     setTaskFormValue('taskDueAt', formatDateTimeForInput(task?.due_at));
     setTaskFormValue('taskStatus', task?.task_status || 'open');
     setTaskFormValue('taskPriority', task?.priority || 'normal');
@@ -4550,6 +4910,8 @@ function updateTaskPreview() {
     const title = document.getElementById('taskTitle')?.value || '';
     const userSelect = document.getElementById('taskUserId');
     const dueAt = document.getElementById('taskDueAt')?.value || '';
+    const leadSelect = document.getElementById('taskLeadId');
+    const opportunitySelect = document.getElementById('taskOpportunityId');
     const status = document.getElementById('taskStatus')?.value || 'open';
     const recurringCheckbox = document.getElementById('taskRecurring');
     const recurrenceFrequency = document.getElementById('taskRecurrenceFrequency')?.value || 'weekly';
@@ -4562,6 +4924,7 @@ function updateTaskPreview() {
     const previewTitle = document.getElementById('taskPreviewTitle');
     const previewUser = document.getElementById('taskPreviewUser');
     const previewDue = document.getElementById('taskPreviewDue');
+    const previewRelation = document.getElementById('taskPreviewRelation');
     const previewRecurrence = document.getElementById('taskPreviewRecurrence');
 
     if (previewStatus) {
@@ -4578,6 +4941,12 @@ function updateTaskPreview() {
 
     if (previewDue) {
         previewDue.textContent = dueAt ? formatDateTime(dueAt) : 'No due date';
+    }
+
+    if (previewRelation) {
+        const opportunity = opportunitySelect?.value ? opportunitySelect.selectedOptions?.[0]?.textContent?.trim() : '';
+        const lead = leadSelect?.value ? leadSelect.selectedOptions?.[0]?.textContent?.trim() : '';
+        previewRelation.textContent = opportunity ? `Opportunity: ${opportunity}` : (lead ? `Lead: ${lead}` : 'No related lead or opportunity');
     }
 
     if (previewRecurrence) {
@@ -5032,12 +5401,12 @@ function renderTransactions() {
                 <td>${formatDateTime(transaction.processed_at || transaction.created_at)}</td>
                 <td>
                     <div class="product-actions">
-                        <button type="button"
+                        ${transaction.sales_order_id ? '<span class="transaction-managed-label">Managed in Sales Orders</span>' : `<button type="button"
                             class="table-action"
                             data-transaction-action="edit"
                             data-transaction-id="${adminEscapeHtml(transaction.id)}">
                             Edit
-                        </button>
+                        </button>`}
                     </div>
                 </td>
             </tr>

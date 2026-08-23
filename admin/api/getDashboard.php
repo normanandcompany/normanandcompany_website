@@ -63,6 +63,13 @@ function dashboardTableExists(PDO $pdo, string $table): bool
     return dashboardIntValue($stmt->fetchColumn()) > 0;
 }
 
+function dashboardColumnExists(PDO $pdo, string $table, string $column): bool
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table AND COLUMN_NAME=:column");
+    $stmt->execute([':table' => $table, ':column' => $column]);
+    return dashboardIntValue($stmt->fetchColumn()) > 0;
+}
+
 function dashboardFetchOne(PDO $pdo, string $sql): int
 {
     return dashboardIntValue(dashboardExecuteQuery($pdo, $sql)->fetchColumn());
@@ -154,6 +161,66 @@ function dashboardFetchContactMetrics(PDO $pdo): array
     return [
         'total_contacts' => dashboardIntValue($metrics['total_contacts'] ?? 0),
         'contacts_last_30_days' => dashboardIntValue($metrics['contacts_last_30_days'] ?? 0)
+    ];
+}
+
+function dashboardFetchAlerts(PDO $pdo): array
+{
+    $taskAlerts = [];
+    $contactAlerts = [];
+    $overdueTaskCount = 0;
+    $overdueContactCount = 0;
+
+    if (dashboardTableExists($pdo, 'tasks')) {
+        $overdueTaskCount = dashboardFetchOne($pdo, "SELECT COUNT(*) FROM tasks WHERE task_status IN ('open','in_progress') AND due_at IS NOT NULL AND due_at<NOW()");
+        $taskAlerts = dashboardFetchRows($pdo, "
+            SELECT
+                'task' alert_type,
+                t.id,
+                t.title,
+                t.description summary,
+                t.due_at,
+                t.priority,
+                CONCAT(u.first_name,' ',u.last_name) assigned_to
+            FROM tasks t
+            INNER JOIN users u ON u.id=t.user_id
+            WHERE t.task_status IN ('open','in_progress')
+              AND t.due_at IS NOT NULL
+              AND t.due_at<NOW()
+            ORDER BY t.due_at,t.id
+            LIMIT 50
+        ");
+    }
+
+    if (dashboardTableExists($pdo, 'norman_contacts') && dashboardColumnExists($pdo, 'norman_contacts', 'contact_status')) {
+        $overdueContactCount = dashboardFetchOne($pdo, "SELECT COUNT(*) FROM norman_contacts WHERE contact_status IN ('new','in_progress') AND created_at<DATE_SUB(NOW(),INTERVAL 48 HOUR)");
+        $contactAlerts = dashboardFetchRows($pdo, "
+            SELECT
+                'contact' alert_type,
+                id,
+                COALESCE(NULLIF(subject,''),'Contact request') title,
+                message summary,
+                DATE_ADD(created_at,INTERVAL 48 HOUR) due_at,
+                contact_status priority,
+                full_name assigned_to
+            FROM norman_contacts
+            WHERE contact_status IN ('new','in_progress')
+              AND created_at<DATE_SUB(NOW(),INTERVAL 48 HOUR)
+            ORDER BY created_at,id
+            LIMIT 50
+        ");
+    }
+
+    $alerts = array_merge($taskAlerts, $contactAlerts);
+    usort($alerts, static function (array $left, array $right): int {
+        return strcmp((string) ($left['due_at'] ?? ''), (string) ($right['due_at'] ?? ''));
+    });
+
+    return [
+        'overdue_alerts' => $alerts,
+        'overdue_task_count' => $overdueTaskCount,
+        'overdue_contact_count' => $overdueContactCount,
+        'overdue_alert_count' => $overdueTaskCount + $overdueContactCount
     ];
 }
 
@@ -554,6 +621,7 @@ try {
         LIMIT 8
     ");
     $dashboard = array_merge($dashboard, dashboardFetchContactMetrics($pdo));
+    $dashboard = array_merge($dashboard, dashboardFetchAlerts($pdo));
     $dashboard['contacts'] = dashboardFetchRows($pdo, "
         SELECT
             id,
@@ -562,11 +630,25 @@ try {
             phone_number,
             subject,
             message,
+            contact_status,
+            resolved_at,
             created_at
         FROM norman_contacts
         ORDER BY created_at DESC, id DESC
     ");
     $dashboard = array_merge($dashboard, dashboardFetchFinancialMetrics($pdo));
+
+    if (dashboardTableExists($pdo, 'opportunities') && dashboardTableExists($pdo, 'sales_orders')) {
+        $crm = dashboardExecuteQuery($pdo, "SELECT
+            (SELECT COUNT(*) FROM email_leads WHERE lead_status='New' AND archived_at IS NULL) crm_new_leads,
+            (SELECT COUNT(*) FROM email_leads WHERE lead_status='Qualified' AND archived_at IS NULL) crm_qualified_leads,
+            (SELECT COUNT(*) FROM opportunities WHERE stage NOT IN ('Won','Lost') AND archived_at IS NULL) crm_open_opportunities,
+            (SELECT COALESCE(SUM(estimated_value),0) FROM opportunities WHERE stage NOT IN ('Won','Lost') AND archived_at IS NULL) crm_pipeline_value,
+            (SELECT COUNT(*) FROM sales_orders WHERE status='Awaiting Payment') crm_awaiting_payment,
+            (SELECT COUNT(*) FROM sales_orders WHERE status IN ('Paid','Processing','Fulfilled')) crm_paid_orders,
+            (SELECT COALESCE(SUM(grand_total),0) FROM sales_orders WHERE status IN ('Paid','Processing','Fulfilled')) crm_sales_order_revenue")->fetch(PDO::FETCH_ASSOC) ?: [];
+        $dashboard = array_merge($dashboard, $crm);
+    }
 
     echo json_encode([$dashboard]);
 } catch (Throwable $e) {

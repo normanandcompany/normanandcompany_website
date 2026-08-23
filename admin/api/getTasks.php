@@ -37,6 +37,8 @@ try {
         SELECT
             t.id,
             t.user_id,
+            t.lead_id,
+            t.opportunity_id,
             t.title,
             t.description,
             t.task_status,
@@ -51,9 +53,15 @@ try {
             t.created_at,
             t.updated_at,
             CONCAT(u.first_name, ' ', u.last_name) AS assigned_to,
-            u.email_address AS assigned_email
+            u.email_address AS assigned_email,
+            CONCAT_WS(' ', l.first_name, l.last_name) AS lead_name,
+            l.company AS lead_company,
+            l.email_address AS lead_email,
+            o.opportunity_name
         FROM tasks t
         INNER JOIN users u ON u.id = t.user_id
+        LEFT JOIN email_leads l ON l.id = t.lead_id
+        LEFT JOIN opportunities o ON o.id = t.opportunity_id
         {$whereSql}
         ORDER BY
             CASE t.task_status

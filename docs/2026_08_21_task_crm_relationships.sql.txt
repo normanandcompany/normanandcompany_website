@@ -1,0 +1,7 @@
+ALTER TABLE tasks
+    ADD COLUMN lead_id BIGINT UNSIGNED NULL AFTER user_id,
+    ADD COLUMN opportunity_id BIGINT UNSIGNED NULL AFTER lead_id,
+    ADD KEY idx_tasks_lead (lead_id),
+    ADD KEY idx_tasks_opportunity (opportunity_id),
+    ADD CONSTRAINT fk_tasks_lead FOREIGN KEY (lead_id) REFERENCES email_leads(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    ADD CONSTRAINT fk_tasks_opportunity FOREIGN KEY (opportunity_id) REFERENCES opportunities(id) ON UPDATE CASCADE ON DELETE SET NULL;
