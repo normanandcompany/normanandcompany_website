@@ -256,7 +256,10 @@ final class CheckoutService
         $normalized = array_map(static fn(array $item): array => [
             'product_id' => (int) ($item['product_id'] ?? 0),
             'product_variant_id' => (int) ($item['product_variant_id'] ?? 0),
-            'quantity' => (int) ($item['quantity'] ?? 0)
+            'quantity' => (int) ($item['quantity'] ?? 0),
+            'unit_price' => isset($item['unit_price']) && is_numeric($item['unit_price'])
+                ? number_format((float) $item['unit_price'], 2, '.', '')
+                : null
         ], $items);
         usort($normalized, static fn(array $a, array $b): int => [$a['product_id'], $a['product_variant_id']] <=> [$b['product_id'], $b['product_variant_id']]);
         return hash('sha256', json_encode($normalized, JSON_THROW_ON_ERROR));
@@ -274,7 +277,7 @@ final class CheckoutService
             throw new InvalidArgumentException('The cart must contain between 1 and 100 items.');
         }
 
-        $stmt = $this->pdo->prepare("SELECT p.id AS product_id, p.product_name, p.sku AS product_sku, p.price, COALESCE(p.cost, 0) AS cost, p.inventory_count, p.is_apparel, p.vendor_id, v.fulfillment_provider, pv.id AS product_variant_id, pv.size_label_snapshot AS size_label, pv.is_active AS variant_active, COALESCE(vvm.external_variant_id, vpm.default_external_variant_id) AS external_variant_id, COALESCE(vvm.availability_status, vpm.default_availability_status) AS availability_status, CASE WHEN p.is_apparel = 1 THEN vvm.is_active ELSE CASE WHEN vpm.default_external_variant_id IS NOT NULL THEN 1 ELSE 0 END END AS mapping_active FROM products p INNER JOIN vendors v ON v.id = p.vendor_id LEFT JOIN product_variants pv ON pv.id = :variant_id AND pv.product_id = p.id LEFT JOIN vendor_product_mappings vpm ON vpm.product_id = p.id AND vpm.vendor_id = p.vendor_id AND vpm.mapping_status = 'active' LEFT JOIN vendor_variant_mappings vvm ON vvm.product_variant_id = pv.id AND vvm.vendor_product_mapping_id = vpm.id WHERE p.id = :product_id AND p.visible = 1 AND p.is_active = 1 AND v.visible = 1 AND v.is_active = 1 LIMIT 1");
+        $stmt = $this->pdo->prepare("SELECT p.id AS product_id, p.product_name, p.sku AS product_sku, p.price, COALESCE(p.cost, 0) AS cost, p.inventory_count, p.is_apparel, p.vendor_id, v.fulfillment_provider, pv.id AS product_variant_id, pv.size_label_snapshot AS size_label, pv.is_active AS variant_active, COALESCE(pv.price_adjustment, 0) AS price_adjustment, COALESCE(vvm.external_variant_id, vpm.default_external_variant_id) AS external_variant_id, COALESCE(vvm.availability_status, vpm.default_availability_status) AS availability_status, CASE WHEN p.is_apparel = 1 THEN vvm.is_active ELSE CASE WHEN vpm.default_external_variant_id IS NOT NULL THEN 1 ELSE 0 END END AS mapping_active FROM products p INNER JOIN vendors v ON v.id = p.vendor_id LEFT JOIN product_variants pv ON pv.id = :variant_id AND pv.product_id = p.id LEFT JOIN vendor_product_mappings vpm ON vpm.product_id = p.id AND vpm.vendor_id = p.vendor_id AND vpm.mapping_status = 'active' LEFT JOIN vendor_variant_mappings vvm ON vvm.product_variant_id = pv.id AND vvm.vendor_product_mapping_id = vpm.id WHERE p.id = :product_id AND p.visible = 1 AND p.is_active = 1 AND v.visible = 1 AND v.is_active = 1 LIMIT 1");
         $items = [];
         foreach ($rawCart as $rawItem) {
             $productId = (int) ($rawItem['product_id'] ?? $rawItem['id'] ?? 0);
@@ -298,7 +301,7 @@ final class CheckoutService
             if ($row['fulfillment_provider'] !== 'printful' && (int) $row['inventory_count'] < $quantity) {
                 throw new InvalidArgumentException('The requested quantity of ' . $row['product_name'] . ' is not available.');
             }
-            $price = number_format((float) $row['price'], 2, '.', '');
+            $price = number_format((float) $row['price'] + ($isApparel ? (float) $row['price_adjustment'] : 0.0), 2, '.', '');
             $items[] = [
                 ...$row,
                 'product_id' => $productId,

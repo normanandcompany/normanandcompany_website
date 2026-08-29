@@ -1290,10 +1290,33 @@ tbody tr:hover {
 
 .printful-panel { margin-top: 1.5rem; padding: 1.25rem; }
 .printful-panel h2 { margin-top: 0; }
+.printful-sizing-summary { margin: .75rem 0; padding: .75rem 1rem; border-radius: 8px; background: #f2f8fc; color: #163a63; font-weight: 600; }
+.printful-mapping-review { margin: 1rem 0; border: 1px solid rgba(22, 58, 99, .15); border-radius: 8px; padding: .8rem 1rem; }
+.printful-mapping-review summary { cursor: pointer; color: #163a63; font-weight: 700; }
+.printful-pricing-tools { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid rgba(22, 58, 99, .12); }
+.printful-pricing-tools h3 { margin: 0 0 .35rem; color: var(--primary-accent); }
+.printful-pricing-tools p { margin-top: 0; }
+.printful-pricing-tools .form-group { grid-template-columns: 1fr; gap: .35rem; }
+.printful-pricing-tools .form-group label { text-align: left; }
+.printful-pricing-tools .form-group select { max-width: none; }
+.printful-pricing-actions { display: flex; align-items: end; justify-content: flex-end; gap: .65rem; }
+.printful-pricing-preview { margin-top: 1rem; }
+.printful-pricing-preview .product-table td small { display: block; color: #637787; }
+.printful-pricing-tools [hidden] { display: none !important; }
 .printful-variant-mappings { display: grid; gap: .65rem; margin: 1rem 0; }
 .printful-mapping-row { display: grid; grid-template-columns: minmax(90px, .3fr) minmax(260px, 1fr); align-items: center; gap: 1rem; }
 .printful-mapping-row select { width: 100%; }
-@media (max-width: 700px) { .printful-mapping-row { grid-template-columns: 1fr; gap: .25rem; } }
+.printful-size-catalogs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.printful-size-catalogs > section { border: 1px solid rgba(22, 58, 99, .12); border-radius: 10px; padding: 1rem; }
+.printful-size-catalogs h3 { margin-top: 0; }
+.printful-size-form { display: grid; grid-template-columns: minmax(130px, 1fr) 110px; gap: .65rem; align-items: end; }
+.printful-size-form .form-group { grid-template-columns: 1fr; gap: .35rem; }
+.printful-size-form .form-group label { text-align: left; }
+.printful-size-form input[name="name"], .printful-size-form input[name="sort_order"] { max-width: none; border: 1px solid #cbd8e1; background: #fff; }
+.printful-size-form .toggle-row { align-self: end; }
+.printful-size-list { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+@media (max-width: 850px) { .printful-size-catalogs { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .printful-mapping-row, .printful-size-form { grid-template-columns: 1fr; gap: .25rem; } }
 tbody tr:nth-child(even) {
     background-color: #ffffff;
 }
@@ -1807,6 +1830,10 @@ tbody tr:nth-child(even) {
 
 .product-form .form-group {
     grid-template-columns: 1fr;
+}
+
+.product-form [hidden] {
+    display: none !important;
 }
 
 .product-field-row {

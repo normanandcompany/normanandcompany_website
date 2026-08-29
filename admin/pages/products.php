@@ -283,6 +283,16 @@ requireRole('admin');
                         </label>
                     </div>
 
+                    <div class="form-group stacked" id="productApparelSizeTypeGroup" hidden>
+                        <label for="productApparelSizeType">Size catalog</label>
+                        <select id="productApparelSizeType" name="apparel_size_type" disabled>
+                            <option value="">Automatic by category</option>
+                            <option value="adult">Adult apparel sizes</option>
+                            <option value="children">Children's apparel sizes</option>
+                        </select>
+                        <small id="productApparelSizeTypeHelp">Kid's Collection defaults to children's sizes; other apparel defaults to adult sizes.</small>
+                    </div>
+
                     <div class="product-images-panel">
                         <div class="product-images-header">
                             <h3>Images</h3>

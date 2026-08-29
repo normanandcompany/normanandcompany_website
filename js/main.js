@@ -1681,6 +1681,11 @@ async function loadTravelStore(categoryId = 'all') {
                 ? 'product-image book-product-image'
                 : 'product-image';
             const cartButtonLabel = isApparel ? 'Choose Options' : 'Add to Cart';
+            const minimumPrice = Number.parseFloat(product.minimum_price ?? product.price);
+            const maximumPrice = Number.parseFloat(product.maximum_price ?? product.price);
+            const productPriceLabel = Number.isFinite(minimumPrice) && Number.isFinite(maximumPrice) && maximumPrice > minimumPrice
+                ? `From ${formatCartCurrency(minimumPrice)}`
+                : formatCartCurrency(minimumPrice);
             const productActionButton = isBook
                 ? `
                     <button type="button"
@@ -1710,7 +1715,7 @@ async function loadTravelStore(categoryId = 'all') {
 
                     <p>${escapeHtml(product.product_description)}</p>
 
-                    <p><strong>$${parseFloat(product.price).toFixed(2)}</strong></p>
+                    <p><strong>${escapeHtml(productPriceLabel)}</strong></p>
 
                     ${productActionButton}
 
@@ -1873,8 +1878,8 @@ async function getProductSizeDropdown(product) {
 
     const sizeOptions = Array.isArray(product?.variants)
         ? product.variants.filter((variant) => Number(variant.is_available) === 1).map((variant) => `
-                <option value="${escapeHtml(variant.product_variant_id)}">
-                    ${escapeHtml(variant.size_label)}
+                <option value="${escapeHtml(variant.product_variant_id)}" data-size-label="${escapeHtml(variant.size_label)}" data-price="${escapeHtml(variant.effective_price)}">
+                    ${escapeHtml(variant.size_label)} — ${formatCartCurrency(variant.effective_price)}
                 </option>
             `).join('')
         : '';
@@ -2071,7 +2076,7 @@ function buildProductDetailsHtml(product, sizeDropdown = '', options = {}) {
             <p>${escapeHtml(description)}</p>
 
             <!-- Product Price -->
-            <h2>$${formattedPrice}</h2>
+            <h2 id="productDetailPrice">$${formattedPrice}</h2>
 
             <!-- Product Size Drop Down Box (if needed) -->
             ${sizeDropdown}
@@ -2123,6 +2128,15 @@ async function renderProductDetails(productId, container, options = {}) {
         ...options,
         formatDropdown
     });
+
+    const sizeSelect = container.querySelector('#productSize');
+    const priceElement = container.querySelector('#productDetailPrice');
+    const updateSelectedVariantPrice = () => {
+        const selectedPrice = sizeSelect.selectedOptions?.[0]?.dataset.price;
+        if (priceElement) priceElement.textContent = formatCartCurrency(selectedPrice || product.price);
+    };
+    sizeSelect?.addEventListener('change', updateSelectedVariantPrice);
+    if (sizeSelect) updateSelectedVariantPrice();
 
     return product;
 }
@@ -2779,7 +2793,7 @@ function removeCartItem(key) {
 function addProductToCart(product, options = {}) {
     const id = Number.parseInt(product?.id ?? 0, 10);
     const name = String(product?.product_name ?? '').trim();
-    const price = Number.parseFloat(product?.price ?? 0);
+    const price = Number.parseFloat(options.price ?? product?.price ?? 0);
     const quantity = Math.max(1, Number.parseInt(options.quantity ?? 1, 10) || 1);
     const sizeValue = String(options.sizeValue ?? '').trim();
     const sizeLabel = String(options.sizeLabel ?? '').trim();
@@ -2807,6 +2821,8 @@ function addProductToCart(product, options = {}) {
 
     if (existingItem) {
         existingItem.quantity = clampedQuantity;
+        existingItem.price = price;
+        existingItem.sizeLabel = sizeLabel;
     } else {
         shoppingCartState.items.push({
             key,
@@ -2870,7 +2886,8 @@ async function addProductToCartFromDetails(productId, event = null) {
             quantity,
             sizeValue: sizeSelect?.value || '',
             productVariantId: sizeSelect?.value || null,
-            sizeLabel: sizeSelect?.selectedOptions?.[0]?.textContent?.trim() || ''
+            sizeLabel: sizeSelect?.selectedOptions?.[0]?.dataset.sizeLabel || '',
+            price: sizeSelect?.selectedOptions?.[0]?.dataset.price || product.price
         });
     } catch (error) {
         console.error('Error adding product to cart:', error);

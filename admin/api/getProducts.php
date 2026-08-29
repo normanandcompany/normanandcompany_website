@@ -32,6 +32,7 @@ try {
         SELECT
             p.id,
             p.is_apparel,
+            p.apparel_size_type,
             p.product_category_id,
             p.vendor_id,
             p.product_name,

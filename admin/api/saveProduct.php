@@ -107,8 +107,12 @@ try {
         $images[$field] = $rawImages[$index] ?? null;
     }
 
+    $isApparel = isset($_POST['is_apparel']);
+    $apparelSizeType = productApparelSizeType($isApparel, $categoryId, $_POST['apparel_size_type'] ?? null);
+
     $data = [
-        'is_apparel' => isset($_POST['is_apparel']) ? 1 : 0,
+        'is_apparel' => $isApparel ? 1 : 0,
+        'apparel_size_type' => $apparelSizeType,
         'product_category_id' => $categoryId,
         'product_name' => $productName,
         'product_description' => productStringOrNull($_POST['product_description'] ?? ''),

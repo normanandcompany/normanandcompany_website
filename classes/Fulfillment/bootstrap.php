@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/env.php';
 require_once __DIR__ . '/PrintfulException.php';
 require_once __DIR__ . '/PrintfulConfig.php';
 require_once __DIR__ . '/PrintfulClient.php';
+require_once __DIR__ . '/PrintfulVariantPricing.php';
 require_once __DIR__ . '/CheckoutService.php';
 require_once __DIR__ . '/FulfillmentCoordinator.php';
 require_once __DIR__ . '/PrintfulWebhookService.php';

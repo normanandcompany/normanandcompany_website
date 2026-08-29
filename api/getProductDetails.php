@@ -121,6 +121,8 @@ try {
                 pv.size_label_snapshot AS size_label,
                 pv.variant_sku,
                 pv.sort_order,
+                COALESCE(pv.price_adjustment, 0) AS price_adjustment,
+                p.price + COALESCE(pv.price_adjustment, 0) AS effective_price,
                 vvm.availability_status,
                 CASE
                     WHEN v.fulfillment_provider = 'printful'

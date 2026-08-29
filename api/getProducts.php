@@ -69,6 +69,8 @@ try {
             p.long_description,
             p.sku,
             p.price,
+            COALESCE((SELECT MIN(p.price + COALESCE(pv_price.price_adjustment, 0)) FROM product_variants pv_price WHERE pv_price.product_id = p.id AND pv_price.is_active = 1), p.price) AS minimum_price,
+            COALESCE((SELECT MAX(p.price + COALESCE(pv_price.price_adjustment, 0)) FROM product_variants pv_price WHERE pv_price.product_id = p.id AND pv_price.is_active = 1), p.price) AS maximum_price,
             p.inventory_count,
             p.image_url,
             p.seo_slug,

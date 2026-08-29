@@ -84,14 +84,11 @@ if ($adminJsVersion === '') {
                 <li><a href="#" onclick="loadPage('leads')">Leads</a></li>
                 <li><a href="#" onclick="loadPage('opportunities')">Opportunities</a></li>
                 <li><a href="#" onclick="loadPage('salesorders')">Sales Orders</a></li>
-                <li><a href="#" onclick="loadPage('travelcontent')">Travel Content</a></li>
                 <li><a href="#" onclick="loadPage('blogposts')">Blog Editor</a></li>
                 <li><a href="#" onclick="loadPage('news')">News Aggregator</a></li>
                 <li><a href="#" onclick="loadPage('emailtools')">Email Tools</a></li>
                 <li><a href="#" onclick="loadPage('downloads')">Downloads</a></li>
-                <li><a href="#" onclick="loadPage('apis')">Scrapers/API</a></li>
                 <li><a href="#" onclick="loadPage('reports')">Reports</a></li>
-                <li><a href="#" onclick="loadPage('settings')">Site Settings</a></li>
                 <li><a href="/">Return to Website</a></li>
                 <li><a href="/admin/api/logout.php">Logout</a></li>
             </ul>

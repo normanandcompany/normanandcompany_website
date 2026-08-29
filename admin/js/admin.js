@@ -2091,6 +2091,7 @@ function bindProductManagerEvents() {
     const tbody = document.getElementById('productsTableBody');
     const form = document.getElementById('productForm');
     const formCategory = document.getElementById('productCategoryId');
+    const apparel = document.getElementById('productApparel');
     const costInput = document.getElementById('productCost');
     const priceInput = document.getElementById('productPrice');
     const cancelButton = document.getElementById('cancelProductBtn');
@@ -2144,7 +2145,11 @@ function bindProductManagerEvents() {
         }
     });
     form?.addEventListener('submit', handleProductFormSubmit);
-    formCategory?.addEventListener('change', updateProductBookFormatVisibility);
+    formCategory?.addEventListener('change', () => {
+        updateProductBookFormatVisibility();
+        updateProductApparelSizeVisibility();
+    });
+    apparel?.addEventListener('change', updateProductApparelSizeVisibility);
     costInput?.addEventListener('input', updateProductMarginField);
     priceInput?.addEventListener('input', updateProductMarginField);
     cancelButton?.addEventListener('click', closeProductDialog);
@@ -2527,6 +2532,23 @@ function setProductFormValue(id, value) {
     }
 }
 
+function updateProductApparelSizeVisibility() {
+    const apparel = document.getElementById('productApparel');
+    const category = document.getElementById('productCategoryId');
+    const group = document.getElementById('productApparelSizeTypeGroup');
+    const select = document.getElementById('productApparelSizeType');
+    const help = document.getElementById('productApparelSizeTypeHelp');
+    const enabled = Boolean(apparel?.checked);
+
+    if (group) group.hidden = !enabled;
+    if (select) select.disabled = !enabled;
+    if (help) {
+        help.textContent = String(category?.value) === '7'
+            ? "Kid's Collection defaults to children's sizes. Choose Adult only to override it."
+            : 'This apparel product defaults to adult sizes. Choose Children only to override it.';
+    }
+}
+
 function openProductForm(product = null) {
     const form = document.getElementById('productForm');
     const dialog = document.getElementById('productFormDialog');
@@ -2545,6 +2567,7 @@ function openProductForm(product = null) {
     setProductFormValue('productId', product?.id || '');
     setProductFormValue('productName', product?.product_name || '');
     setProductFormValue('productCategoryId', product?.product_category_id || '');
+    setProductFormValue('productApparelSizeType', product?.apparel_size_type || '');
     setProductFormValue('productDescription', product?.product_description || '');
     setProductFormValue('productLongDescription', product?.long_description || '');
     setProductFormValue('productCost', product?.cost || '');
@@ -2570,6 +2593,7 @@ function openProductForm(product = null) {
     renderProductImageSlots(product || {});
     updateProductMarginField();
     updateProductBookFormatVisibility();
+    updateProductApparelSizeVisibility();
 
     if (typeof dialog.showModal === 'function') {
         dialog.showModal();
@@ -6011,7 +6035,7 @@ function emailConfigAlert(message, isError = false) { const alert=document.getEl
 // PRINTFUL FULFILLMENT
 // =========================================
 
-let printfulAdminState = { csrf: '', context: null, syncProducts: [], syncVariants: [] };
+let printfulAdminState = { csrf: '', context: null, syncProducts: [], syncVariants: [], pricingPreview: null };
 
 async function printfulAdminRequest(action, options = {}) {
     const method = options.method || 'GET';
@@ -6040,12 +6064,17 @@ function printfulAdminAlert(message, error = false) {
 async function initPrintfulAdmin() {
     const app = document.getElementById('printfulAdminApp');
     if (!app) return;
-    printfulAdminState = { csrf: '', context: null, syncProducts: [], syncVariants: [] };
+    printfulAdminState = { csrf: '', context: null, syncProducts: [], syncVariants: [], pricingPreview: null };
     app.addEventListener('click', handlePrintfulAdminClick);
     document.getElementById('printfulMappingForm')?.addEventListener('submit', savePrintfulMapping);
-    document.getElementById('printfulChildSizeForm')?.addEventListener('submit', savePrintfulChildSize);
+    app.querySelectorAll('[data-printful-size-form]').forEach(form => form.addEventListener('submit', savePrintfulSize));
     document.getElementById('printfulSyncProduct')?.addEventListener('change', loadPrintfulSyncVariants);
-    document.getElementById('printfulSizeType')?.addEventListener('change', renderPrintfulVariantMappings);
+    document.getElementById('printfulLocalProduct')?.addEventListener('change', () => {
+        renderPrintfulVariantMappings();
+        resetPrintfulPricingPreview();
+    });
+    document.getElementById('printfulPricingMode')?.addEventListener('change', resetPrintfulPricingPreview);
+    document.getElementById('printfulVariantMappings')?.addEventListener('change', updatePrintfulMappingReviewStatus);
     await loadPrintfulAdminContext();
 }
 
@@ -6064,20 +6093,22 @@ async function loadPrintfulAdminContext() {
                 connectionMessage = error.message;
             }
         }
-        const store = liveDiagnostics?.store || {};
         const webhookConfigured = Boolean(liveDiagnostics?.webhooks);
+        const storeAccess = liveDiagnostics?.store_access || '—';
+        const syncedProductCount = Number(liveDiagnostics?.sync_product_count || 0);
+        const lastSuccessfulCall = liveDiagnostics ? 'Just now' : (data.health?.last_success_at || 'Never');
         const diagnostics = document.getElementById('printfulDiagnostics');
         if (diagnostics) diagnostics.innerHTML = `
             <div class="product-metric"><span>${adminEscapeHtml(connectionMessage)}</span><small>Connection</small></div>
-            <div class="product-metric"><span>${adminEscapeHtml(store.name || store.store_name || '—')}</span><small>Connected store</small></div>
+            <div class="product-metric"><span>${adminEscapeHtml(storeAccess)}</span><small>Store access${liveDiagnostics ? ` · ${syncedProductCount} products` : ''}</small></div>
             <div class="product-metric"><span>${config.auto_confirm ? 'Enabled' : 'Disabled'}</span><small>Auto-confirm</small></div>
             <div class="product-metric"><span>${adminEscapeHtml(config.app_environment || 'production')}</span><small>Environment</small></div>
             <div class="product-metric"><span>${config.webhook_secret_configured ? (webhookConfigured ? 'Active' : 'Secret configured') : 'Missing secret'}</span><small>Webhook</small></div>
-            <div class="product-metric"><span>${adminEscapeHtml(data.health?.last_success_at || 'Never')}</span><small>Last successful API call</small></div>`;
+            <div class="product-metric"><span>${adminEscapeHtml(lastSuccessfulCall)}</span><small>Last successful API call</small></div>`;
         const local = document.getElementById('printfulLocalProduct');
         if (local) local.innerHTML = '<option value="">Select product</option>' + (data.products || []).map(product => `<option value="${Number(product.id)}">${adminEscapeHtml(product.product_name)}${product.external_product_id ? ` — mapped (${adminEscapeHtml(product.mapped_variant_count)}/${adminEscapeHtml(product.variant_count)})` : ''}</option>`).join('');
-        const sizes = document.getElementById('printfulChildSizes');
-        if (sizes) sizes.innerHTML = (data.childrens_sizes || []).map(size => `<button type="button" class="btn-secondary btn-small" data-edit-child-size="${Number(size.id)}">${adminEscapeHtml(size.name)} · ${Number(size.sort_order)} · ${Number(size.is_active) ? 'active' : 'inactive'}</button>`).join(' ') || '<p>No children\'s sizes configured.</p>';
+        renderPrintfulSizeCatalog('adult', data.adult_sizes || []);
+        renderPrintfulSizeCatalog('children', data.childrens_sizes || []);
         renderPrintfulFulfillments(data.fulfillments || []);
         renderPrintfulVariantMappings();
     } catch (error) { printfulAdminAlert(error.message, true); }
@@ -6085,10 +6116,12 @@ async function loadPrintfulAdminContext() {
 
 async function handlePrintfulAdminClick(event) {
     const action = event.target.closest('[data-printful-action]')?.dataset.printfulAction;
-    const editSize = event.target.closest('[data-edit-child-size]');
+    const editSize = event.target.closest('[data-edit-printful-size]');
     if (editSize) {
-        const size = (printfulAdminState.context?.childrens_sizes || []).find(item => String(item.id) === editSize.dataset.editChildSize);
-        const form = document.getElementById('printfulChildSizeForm');
+        const type = editSize.dataset.sizeType;
+        const sizes = type === 'adult' ? printfulAdminState.context?.adult_sizes : printfulAdminState.context?.childrens_sizes;
+        const size = (sizes || []).find(item => String(item.id) === editSize.dataset.editPrintfulSize);
+        const form = document.querySelector(`[data-printful-size-form="${type}"]`);
         if (size && form) { form.elements.id.value = size.id; form.elements.name.value = size.name; form.elements.sort_order.value = size.sort_order; form.elements.is_active.checked = Number(size.is_active) === 1; }
         return;
     }
@@ -6101,6 +6134,8 @@ async function handlePrintfulAdminClick(event) {
             select.innerHTML = '<option value="">Select Printful product</option>' + printfulAdminState.syncProducts.map(product => `<option value="${adminEscapeHtml(product.id)}">${adminEscapeHtml(product.name)} · #${adminEscapeHtml(product.id)} · ${Number(product.synced || 0)}/${Number(product.variants || 0)} synced</option>`).join('');
             printfulAdminAlert(`${printfulAdminState.syncProducts.length} Printful products loaded.`);
         }
+        if (action === 'preview-pricing') await previewPrintfulPricing();
+        if (action === 'apply-pricing') await applyPrintfulPricing();
         if (action === 'retry') {
             const body = new FormData(); body.set('order_id', event.target.closest('[data-order-id]').dataset.orderId);
             const data = await printfulAdminRequest('retry_fulfillment', { method: 'POST', body }); printfulAdminAlert(data.message); await loadPrintfulAdminContext();
@@ -6127,19 +6162,87 @@ function printfulVariantLabel(variant) {
     return [variant.name, variant.sku ? `SKU ${variant.sku}` : '', `#${variant.id}`, variant.availability_status || (variant.synced ? 'active' : 'unsynced')].filter(Boolean).join(' · ');
 }
 
+function printfulSelectedLocalProduct() {
+    const id = document.getElementById('printfulLocalProduct')?.value;
+    return (printfulAdminState.context?.products || []).find(product => String(product.id) === String(id)) || null;
+}
+
+function printfulProductSizeType(product = printfulSelectedLocalProduct()) {
+    if (!product || Number(product.is_apparel) !== 1) return 'none';
+    if (product.apparel_size_type === 'children') return 'children';
+    if (product.apparel_size_type === 'adult') return 'adult';
+    return Number(product.product_category_id) === 7 ? 'children' : 'adult';
+}
+
+function normalizePrintfulSize(value) {
+    return String(value || '').trim().toUpperCase()
+        .replace(/TRIPLE[\s-]*EXTRA[\s-]*LARGE|3X[\s-]*LARGE/g, '3XL')
+        .replace(/DOUBLE[\s-]*EXTRA[\s-]*LARGE|2X[\s-]*LARGE/g, '2XL')
+        .replace(/EXTRA[\s-]*SMALL/g, 'XS')
+        .replace(/EXTRA[\s-]*LARGE/g, 'XL')
+        .replace(/^SMALL$/, 'S').replace(/^MEDIUM$/, 'M').replace(/^LARGE$/, 'L')
+        .replace(/^XXL$/, '2XL').replace(/^XXXL$/, '3XL')
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+function printfulVariantSizeCandidates(variant) {
+    const name = String(variant.name || variant.product?.name || '');
+    const finalNamePart = name.split('/').pop()?.trim() || '';
+    return [...new Set([variant.size, variant.product?.size, finalNamePart].map(normalizePrintfulSize).filter(Boolean))];
+}
+
+function findAutomaticPrintfulVariant(sizeName) {
+    const normalized = normalizePrintfulSize(sizeName);
+    const matches = printfulAdminState.syncVariants.filter(variant => printfulVariantSizeCandidates(variant).includes(normalized));
+    return matches.length === 1 ? String(matches[0].id) : '';
+}
+
+function updatePrintfulMappingReviewStatus() {
+    const container = document.getElementById('printfulVariantMappings');
+    const status = document.getElementById('printfulMappingReviewStatus');
+    if (!container || !status) return;
+    const selects = [...container.querySelectorAll('[data-local-size-id]')];
+    const mapped = selects.filter(select => select.value).length;
+    status.textContent = selects.length ? `· ${mapped}/${selects.length} ready` : '';
+}
+
 function renderPrintfulVariantMappings() {
     const container = document.getElementById('printfulVariantMappings');
     if (!container) return;
-    const type = document.getElementById('printfulSizeType')?.value || 'adult';
+    const product = printfulSelectedLocalProduct();
+    const type = printfulProductSizeType(product);
+    const summary = document.getElementById('printfulProductSizingSummary');
+    if (summary) {
+        summary.textContent = !product
+            ? 'Select a local product to see its size catalog.'
+            : type === 'none'
+                ? `${product.product_name} is a standard product with no apparel sizes.`
+                : `${product.product_name} uses the ${type === 'children' ? "children's" : 'adult'} size catalog automatically.`;
+    }
     const options = '<option value="">Not offered</option>' + printfulAdminState.syncVariants.map(variant => `<option value="${adminEscapeHtml(variant.id)}">${adminEscapeHtml(printfulVariantLabel(variant))}</option>`).join('');
+    const status = document.getElementById('printfulMappingReviewStatus');
+    if (!product) {
+        container.innerHTML = '<p>Select a local product first.</p>';
+        if (status) status.textContent = '';
+        return;
+    }
     if (type === 'none') {
         container.innerHTML = `<label class="printful-mapping-row"><span>Standard product</span><select data-local-size-id="0">${options}</select></label>`;
+        const select = container.querySelector('select');
+        if (select && printfulAdminState.syncVariants.length === 1) select.value = String(printfulAdminState.syncVariants[0].id);
+        if (status) status.textContent = select?.value ? '· ready' : '· choose one variant';
         return;
     }
     const sizes = type === 'children' ? printfulAdminState.context?.childrens_sizes : printfulAdminState.context?.adult_sizes;
     const activeSizes = (sizes || []).filter(size => Number(size.is_active) === 1);
     if (!activeSizes.length) { container.innerHTML = '<p>No active local sizes are configured.</p>'; return; }
-    container.innerHTML = activeSizes.map(size => `<label class="printful-mapping-row"><span>${adminEscapeHtml(size.name)}</span><select data-local-size-id="${Number(size.id)}">${options}</select></label>`).join('');
+    container.innerHTML = activeSizes.map(size => {
+        const automaticVariant = findAutomaticPrintfulVariant(size.name);
+        return `<label class="printful-mapping-row"><span>${adminEscapeHtml(size.name)}</span><select data-local-size-id="${Number(size.id)}" data-automatic-variant="${adminEscapeHtml(automaticVariant)}">${options}</select></label>`;
+    }).join('');
+    container.querySelectorAll('[data-automatic-variant]').forEach(select => { if (select.dataset.automaticVariant) select.value = select.dataset.automaticVariant; });
+    const matched = [...container.querySelectorAll('select')].filter(select => select.value).length;
+    if (status) status.textContent = `· ${matched}/${activeSizes.length} matched automatically`;
 }
 
 async function savePrintfulMapping(event) {
@@ -6154,10 +6257,64 @@ async function savePrintfulMapping(event) {
     catch (error) { printfulAdminAlert(error.message, true); }
 }
 
-async function savePrintfulChildSize(event) {
+async function savePrintfulSize(event) {
     event.preventDefault();
-    try { const data = await printfulAdminRequest('save_child_size', { method: 'POST', body: new FormData(event.currentTarget) }); event.currentTarget.reset(); event.currentTarget.elements.id.value = ''; event.currentTarget.elements.is_active.checked = true; printfulAdminAlert(data.message); await loadPrintfulAdminContext(); }
+    try { const data = await printfulAdminRequest('save_size', { method: 'POST', body: new FormData(event.currentTarget) }); event.currentTarget.reset(); event.currentTarget.elements.id.value = ''; event.currentTarget.elements.is_active.checked = true; printfulAdminAlert(data.message); await loadPrintfulAdminContext(); }
     catch (error) { printfulAdminAlert(error.message, true); }
+}
+
+function renderPrintfulSizeCatalog(type, sizes) {
+    const container = document.getElementById(type === 'adult' ? 'printfulAdultSizes' : 'printfulChildSizes');
+    if (!container) return;
+    container.innerHTML = sizes.map(size => `<button type="button" class="btn-secondary btn-small" data-edit-printful-size="${Number(size.id)}" data-size-type="${type}">${adminEscapeHtml(size.name)} · ${Number(size.sort_order)} · ${Number(size.is_active) ? 'active' : 'inactive'}</button>`).join('') || `<p>No ${type === 'adult' ? 'adult' : "children's"} sizes configured.</p>`;
+}
+
+function resetPrintfulPricingPreview() {
+    printfulAdminState.pricingPreview = null;
+    const container = document.getElementById('printfulPricingPreview');
+    const applyButton = document.querySelector('[data-printful-action="apply-pricing"]');
+    if (container) container.innerHTML = '<p>Select a mapped apparel product to preview its variant prices.</p>';
+    if (applyButton) applyButton.hidden = true;
+}
+
+function renderPrintfulPricingPreview(preview) {
+    const container = document.getElementById('printfulPricingPreview');
+    const applyButton = document.querySelector('[data-printful-action="apply-pricing"]');
+    if (!container) return;
+    const rows = preview?.variants || [];
+    if (!rows.length) {
+        container.innerHTML = '<p>No mapped variants are available for pricing.</p>';
+        if (applyButton) applyButton.hidden = true;
+        return;
+    }
+    const modeDescription = preview.mode === 'retail'
+        ? 'Copy Printful retail prices exactly'
+        : `Keep the local base price and add differences above Printful's ${formatCurrency(preview.printful_baseline_price)} baseline`;
+    container.className = 'printful-pricing-preview';
+    container.innerHTML = `<p><strong>${adminEscapeHtml(preview.product_name)}</strong> · Base price ${formatCurrency(preview.base_price)}<br><small>${adminEscapeHtml(modeDescription)}</small></p>
+        <div class="product-table-scroll"><table class="product-table"><thead><tr><th>Size</th><th>Current local</th><th>Printful retail</th><th>Adjustment</th><th>Proposed local</th></tr></thead><tbody>${rows.map(row => { const adjustment = Number(row.price_adjustment); return `<tr><td>${adminEscapeHtml(row.size_label)}</td><td>${formatCurrency(row.current_price)}</td><td>${formatCurrency(row.remote_price)} <small>${adminEscapeHtml(row.currency || 'USD')}</small></td><td>${adjustment < 0 ? '-' : '+'}${formatCurrency(Math.abs(adjustment))}</td><td><strong>${formatCurrency(row.proposed_price)}</strong></td></tr>`; }).join('')}</tbody></table></div>`;
+    if (applyButton) applyButton.hidden = false;
+}
+
+async function previewPrintfulPricing() {
+    const productId = document.getElementById('printfulLocalProduct')?.value;
+    const mode = document.getElementById('printfulPricingMode')?.value || 'difference';
+    if (!productId) throw new Error('Select a local product first.');
+    const data = await printfulAdminRequest('pricing_preview', { params: { product_id: productId, mode } });
+    printfulAdminState.pricingPreview = data.preview;
+    renderPrintfulPricingPreview(data.preview);
+    printfulAdminAlert('Variant pricing preview loaded. Review the proposed prices before applying them.');
+}
+
+async function applyPrintfulPricing() {
+    const productId = document.getElementById('printfulLocalProduct')?.value;
+    const mode = document.getElementById('printfulPricingMode')?.value || 'difference';
+    if (!productId || !printfulAdminState.pricingPreview) throw new Error('Preview pricing before applying it.');
+    const body = new FormData(); body.set('product_id', productId); body.set('mode', mode);
+    const data = await printfulAdminRequest('apply_pricing', { method: 'POST', body });
+    printfulAdminState.pricingPreview = data.preview;
+    renderPrintfulPricingPreview(data.preview);
+    printfulAdminAlert(data.message);
 }
 
 function renderPrintfulFulfillments(items) {

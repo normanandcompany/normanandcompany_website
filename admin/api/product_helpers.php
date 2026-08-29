@@ -80,6 +80,24 @@ function productIntOrNull(?string $value, string $fieldName = 'Value'): ?int
     return (int) $value;
 }
 
+function productApparelSizeType(bool $isApparel, int $categoryId, ?string $requestedType): ?string
+{
+    if (!$isApparel) {
+        return null;
+    }
+
+    $requestedType = trim((string) $requestedType);
+    if ($requestedType !== '' && !in_array($requestedType, ['adult', 'children'], true)) {
+        throw new InvalidArgumentException('Select a valid apparel size catalog.');
+    }
+
+    if ($requestedType !== '') {
+        return $requestedType;
+    }
+
+    return $categoryId === 7 ? 'children' : 'adult';
+}
+
 function productSlug(string $value): string
 {
     $slug = strtolower(trim($value));
