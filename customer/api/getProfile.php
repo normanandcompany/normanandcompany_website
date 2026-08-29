@@ -63,6 +63,20 @@ try {
     $favorites = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt->closeCursor();
 
+    $orderMetaStmt = $pdo->prepare('SELECT id, payment_status, payment_provider, fulfillment_status, currency_code, paid_at FROM orders WHERE user_id = :user_id AND COALESCE(visible, 1) = 1');
+    $orderMetaStmt->execute([':user_id' => $userId]);
+    $orderMeta = [];
+    foreach ($orderMetaStmt->fetchAll(PDO::FETCH_ASSOC) as $meta) {
+        $orderMeta[(int) $meta['id']] = $meta;
+    }
+
+    $shipmentStmt = $pdo->prepare('SELECT vf.order_id, v.vendor_name, fs.shipment_status, fs.carrier, fs.service, fs.tracking_number, fs.tracking_url, fs.shipped_at, fs.estimated_delivery_at, fs.delivered_at FROM fulfillment_shipments fs INNER JOIN vendor_fulfillments vf ON vf.id = fs.vendor_fulfillment_id INNER JOIN orders o ON o.id = vf.order_id INNER JOIN vendors v ON v.id = vf.vendor_id WHERE o.user_id = :user_id AND COALESCE(o.visible, 1) = 1 ORDER BY fs.shipped_at, fs.id');
+    $shipmentStmt->execute([':user_id' => $userId]);
+    $shipmentsByOrder = [];
+    foreach ($shipmentStmt->fetchAll(PDO::FETCH_ASSOC) as $shipment) {
+        $shipmentsByOrder[(int) $shipment['order_id']][] = $shipment;
+    }
+
     if (!$profile) {
         sendCustomerProfileJson([
             'success' => false,
@@ -83,6 +97,10 @@ try {
 
     foreach ($orders as &$order) {
         $order['items'] = $itemsByOrder[(int) $order['id']] ?? [];
+        if (isset($orderMeta[(int) $order['id']])) {
+            $order = array_merge($order, $orderMeta[(int) $order['id']]);
+        }
+        $order['shipments'] = $shipmentsByOrder[(int) $order['id']] ?? [];
     }
     unset($order);
 

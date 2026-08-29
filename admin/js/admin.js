@@ -31,6 +31,10 @@ async function loadPage(pageName, options = {}) {
                 loadProducts();
                 break;
 
+            case 'printful':
+                initPrintfulAdmin();
+                break;
+
             // Page loader for user data
             case 'users':
                 loadUsers();
@@ -6002,3 +6006,162 @@ async function emailConfigSubmit(event) {
 }
 
 function emailConfigAlert(message, isError = false) { const alert=document.getElementById('emailConfigAlert'); if(!alert)return; alert.textContent=message; alert.classList.toggle('is-error',isError); alert.classList.toggle('is-success',!isError); alert.hidden=false; }
+
+// =========================================
+// PRINTFUL FULFILLMENT
+// =========================================
+
+let printfulAdminState = { csrf: '', context: null, syncProducts: [], syncVariants: [] };
+
+async function printfulAdminRequest(action, options = {}) {
+    const method = options.method || 'GET';
+    let url = `/admin/api/printful.php?action=${encodeURIComponent(action)}`;
+    const request = { method, cache: 'no-store', headers: { Accept: 'application/json' } };
+    if (method === 'GET' && options.params) url += `&${new URLSearchParams(options.params)}`;
+    if (method === 'POST') {
+        const body = options.body instanceof FormData ? options.body : new FormData();
+        body.set('action', action);
+        request.body = body;
+        request.headers['X-CSRF-Token'] = printfulAdminState.csrf;
+    }
+    const response = await fetch(url, request);
+    const data = await response.json().catch(() => ({ success: false, message: 'Printful returned an invalid response.' }));
+    if (!response.ok || !data.success) throw new Error(data.message || 'Printful request failed.');
+    if (data.csrf_token) printfulAdminState.csrf = data.csrf_token;
+    return data;
+}
+
+function printfulAdminAlert(message, error = false) {
+    const alert = document.getElementById('printfulAlert');
+    if (!alert) return;
+    alert.textContent = message; alert.dataset.type = error ? 'error' : 'success'; alert.hidden = false;
+}
+
+async function initPrintfulAdmin() {
+    const app = document.getElementById('printfulAdminApp');
+    if (!app) return;
+    printfulAdminState = { csrf: '', context: null, syncProducts: [], syncVariants: [] };
+    app.addEventListener('click', handlePrintfulAdminClick);
+    document.getElementById('printfulMappingForm')?.addEventListener('submit', savePrintfulMapping);
+    document.getElementById('printfulChildSizeForm')?.addEventListener('submit', savePrintfulChildSize);
+    document.getElementById('printfulSyncProduct')?.addEventListener('change', loadPrintfulSyncVariants);
+    document.getElementById('printfulSizeType')?.addEventListener('change', renderPrintfulVariantMappings);
+    await loadPrintfulAdminContext();
+}
+
+async function loadPrintfulAdminContext() {
+    try {
+        const data = await printfulAdminRequest('context');
+        printfulAdminState.context = data;
+        const config = data.configuration || {};
+        let liveDiagnostics = null;
+        let connectionMessage = config.token_configured ? 'Not checked' : 'Missing token';
+        if (config.token_configured) {
+            try {
+                liveDiagnostics = await printfulAdminRequest('diagnostics');
+                connectionMessage = 'Connected';
+            } catch (error) {
+                connectionMessage = error.message;
+            }
+        }
+        const store = liveDiagnostics?.store || {};
+        const webhookConfigured = Boolean(liveDiagnostics?.webhooks);
+        const diagnostics = document.getElementById('printfulDiagnostics');
+        if (diagnostics) diagnostics.innerHTML = `
+            <div class="product-metric"><span>${adminEscapeHtml(connectionMessage)}</span><small>Connection</small></div>
+            <div class="product-metric"><span>${adminEscapeHtml(store.name || store.store_name || '—')}</span><small>Connected store</small></div>
+            <div class="product-metric"><span>${config.auto_confirm ? 'Enabled' : 'Disabled'}</span><small>Auto-confirm</small></div>
+            <div class="product-metric"><span>${adminEscapeHtml(config.app_environment || 'production')}</span><small>Environment</small></div>
+            <div class="product-metric"><span>${config.webhook_secret_configured ? (webhookConfigured ? 'Active' : 'Secret configured') : 'Missing secret'}</span><small>Webhook</small></div>
+            <div class="product-metric"><span>${adminEscapeHtml(data.health?.last_success_at || 'Never')}</span><small>Last successful API call</small></div>`;
+        const local = document.getElementById('printfulLocalProduct');
+        if (local) local.innerHTML = '<option value="">Select product</option>' + (data.products || []).map(product => `<option value="${Number(product.id)}">${adminEscapeHtml(product.product_name)}${product.external_product_id ? ` — mapped (${adminEscapeHtml(product.mapped_variant_count)}/${adminEscapeHtml(product.variant_count)})` : ''}</option>`).join('');
+        const sizes = document.getElementById('printfulChildSizes');
+        if (sizes) sizes.innerHTML = (data.childrens_sizes || []).map(size => `<button type="button" class="btn-secondary btn-small" data-edit-child-size="${Number(size.id)}">${adminEscapeHtml(size.name)} · ${Number(size.sort_order)} · ${Number(size.is_active) ? 'active' : 'inactive'}</button>`).join(' ') || '<p>No children\'s sizes configured.</p>';
+        renderPrintfulFulfillments(data.fulfillments || []);
+        renderPrintfulVariantMappings();
+    } catch (error) { printfulAdminAlert(error.message, true); }
+}
+
+async function handlePrintfulAdminClick(event) {
+    const action = event.target.closest('[data-printful-action]')?.dataset.printfulAction;
+    const editSize = event.target.closest('[data-edit-child-size]');
+    if (editSize) {
+        const size = (printfulAdminState.context?.childrens_sizes || []).find(item => String(item.id) === editSize.dataset.editChildSize);
+        const form = document.getElementById('printfulChildSizeForm');
+        if (size && form) { form.elements.id.value = size.id; form.elements.name.value = size.name; form.elements.sort_order.value = size.sort_order; form.elements.is_active.checked = Number(size.is_active) === 1; }
+        return;
+    }
+    if (!action) return;
+    try {
+        if (action === 'refresh') { await loadPrintfulAdminContext(); printfulAdminAlert('Printful administration refreshed.'); }
+        if (action === 'load-products') {
+            const data = await printfulAdminRequest('sync_products'); printfulAdminState.syncProducts = data.products || [];
+            const select = document.getElementById('printfulSyncProduct');
+            select.innerHTML = '<option value="">Select Printful product</option>' + printfulAdminState.syncProducts.map(product => `<option value="${adminEscapeHtml(product.id)}">${adminEscapeHtml(product.name)} · #${adminEscapeHtml(product.id)} · ${Number(product.synced || 0)}/${Number(product.variants || 0)} synced</option>`).join('');
+            printfulAdminAlert(`${printfulAdminState.syncProducts.length} Printful products loaded.`);
+        }
+        if (action === 'retry') {
+            const body = new FormData(); body.set('order_id', event.target.closest('[data-order-id]').dataset.orderId);
+            const data = await printfulAdminRequest('retry_fulfillment', { method: 'POST', body }); printfulAdminAlert(data.message); await loadPrintfulAdminContext();
+        }
+        if (action === 'sync') {
+            const body = new FormData(); body.set('fulfillment_id', event.target.closest('[data-fulfillment-id]').dataset.fulfillmentId);
+            const data = await printfulAdminRequest('sync_fulfillment', { method: 'POST', body }); printfulAdminAlert(data.message); await loadPrintfulAdminContext();
+        }
+    } catch (error) { printfulAdminAlert(error.message, true); }
+}
+
+async function loadPrintfulSyncVariants() {
+    const id = document.getElementById('printfulSyncProduct')?.value;
+    if (!id) { printfulAdminState.syncVariants = []; renderPrintfulVariantMappings(); return; }
+    try {
+        const data = await printfulAdminRequest('sync_product', { params: { id } });
+        const product = data.product || {};
+        printfulAdminState.syncVariants = Array.isArray(product.sync_variants) ? product.sync_variants : (Array.isArray(product.variants) ? product.variants : []);
+        renderPrintfulVariantMappings();
+    } catch (error) { printfulAdminAlert(error.message, true); }
+}
+
+function printfulVariantLabel(variant) {
+    return [variant.name, variant.sku ? `SKU ${variant.sku}` : '', `#${variant.id}`, variant.availability_status || (variant.synced ? 'active' : 'unsynced')].filter(Boolean).join(' · ');
+}
+
+function renderPrintfulVariantMappings() {
+    const container = document.getElementById('printfulVariantMappings');
+    if (!container) return;
+    const type = document.getElementById('printfulSizeType')?.value || 'adult';
+    const options = '<option value="">Not offered</option>' + printfulAdminState.syncVariants.map(variant => `<option value="${adminEscapeHtml(variant.id)}">${adminEscapeHtml(printfulVariantLabel(variant))}</option>`).join('');
+    if (type === 'none') {
+        container.innerHTML = `<label class="printful-mapping-row"><span>Standard product</span><select data-local-size-id="0">${options}</select></label>`;
+        return;
+    }
+    const sizes = type === 'children' ? printfulAdminState.context?.childrens_sizes : printfulAdminState.context?.adult_sizes;
+    const activeSizes = (sizes || []).filter(size => Number(size.is_active) === 1);
+    if (!activeSizes.length) { container.innerHTML = '<p>No active local sizes are configured.</p>'; return; }
+    container.innerHTML = activeSizes.map(size => `<label class="printful-mapping-row"><span>${adminEscapeHtml(size.name)}</span><select data-local-size-id="${Number(size.id)}">${options}</select></label>`).join('');
+}
+
+async function savePrintfulMapping(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const mappings = [...form.querySelectorAll('[data-local-size-id]')].filter(select => select.value).map(select => {
+        const variant = printfulAdminState.syncVariants.find(item => String(item.id) === select.value) || {};
+        return { size_id: Number(select.dataset.localSizeId), external_variant_id: select.value, size: variant.size || '', color: variant.color || '' };
+    });
+    const body = new FormData(form); body.set('mappings', JSON.stringify(mappings));
+    try { const data = await printfulAdminRequest('save_mapping', { method: 'POST', body }); printfulAdminAlert(data.message); await loadPrintfulAdminContext(); }
+    catch (error) { printfulAdminAlert(error.message, true); }
+}
+
+async function savePrintfulChildSize(event) {
+    event.preventDefault();
+    try { const data = await printfulAdminRequest('save_child_size', { method: 'POST', body: new FormData(event.currentTarget) }); event.currentTarget.reset(); event.currentTarget.elements.id.value = ''; event.currentTarget.elements.is_active.checked = true; printfulAdminAlert(data.message); await loadPrintfulAdminContext(); }
+    catch (error) { printfulAdminAlert(error.message, true); }
+}
+
+function renderPrintfulFulfillments(items) {
+    const body = document.getElementById('printfulFulfillments'); if (!body) return;
+    if (!items.length) { body.innerHTML = '<tr><td colspan="7">No vendor fulfillments yet.</td></tr>'; return; }
+    body.innerHTML = items.map(item => `<tr><td>${adminEscapeHtml(item.order_number || item.order_id)}</td><td>${adminEscapeHtml(item.payment_status)}</td><td>${adminEscapeHtml(item.vendor_name)}</td><td>${adminEscapeHtml(item.fulfillment_status)}${item.last_error_message ? `<small>${adminEscapeHtml(item.last_error_message)}</small>` : ''}</td><td>${adminEscapeHtml(item.external_order_id || '—')}</td><td>${adminEscapeHtml(item.last_synced_at || '—')}</td><td>${item.external_order_id ? `<button class="btn-secondary btn-small" data-printful-action="sync" data-fulfillment-id="${Number(item.id)}">Sync</button>` : `<button class="btn-secondary btn-small" data-printful-action="retry" data-order-id="${Number(item.order_id)}" ${item.payment_status !== 'paid' ? 'disabled title="Order must be paid"' : ''}>Process</button>`}</td></tr>`).join('');
+}

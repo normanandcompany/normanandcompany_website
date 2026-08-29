@@ -1871,42 +1871,12 @@ async function getProductSizeDropdown(product) {
         return '';
     }
 
-    const sizes = await fetch('/api/getApparelSizes.php');
-    const sizesdata = await sizes.json();
-
-    if (!sizes.ok || sizesdata?.error) {
-        throw new Error(sizesdata?.error || `HTTP error! Status: ${sizes.status}`);
-    }
-
-    const sizeOptions = Array.isArray(sizesdata)
-        ? sizesdata.map((size) => {
-            const fallbackLabel = typeof size === 'object' && size !== null
-                ? Object.values(size).find((value) => typeof value === 'string' && value.trim() !== '')
-                : size;
-            const label = size?.size_name
-                ?? size?.apparel_size_name
-                ?? size?.size_label
-                ?? size?.apparel_size
-                ?? size?.size
-                ?? size?.name
-                ?? size?.label
-                ?? size?.size_code
-                ?? size?.apparel_size_code
-                ?? fallbackLabel
-                ?? '';
-            const value = size?.size_id
-                ?? size?.apparel_size_id
-                ?? size?.id
-                ?? size?.size_code
-                ?? size?.apparel_size_code
-                ?? label;
-
-            return `
-                <option value="${escapeHtml(value)}">
-                    ${escapeHtml(label)}
+    const sizeOptions = Array.isArray(product?.variants)
+        ? product.variants.filter((variant) => Number(variant.is_available) === 1).map((variant) => `
+                <option value="${escapeHtml(variant.product_variant_id)}">
+                    ${escapeHtml(variant.size_label)}
                 </option>
-            `;
-        }).join('')
+            `).join('')
         : '';
 
     if (!sizeOptions) {
@@ -2037,8 +2007,11 @@ function getProductPurchaseControls(product) {
 
     const productId = Number.parseInt(product?.id ?? 0, 10);
     const inventoryCount = Number.parseInt(product?.inventory_count ?? '', 10);
-    const hasInventoryLimit = Number.isFinite(inventoryCount) && inventoryCount >= 0;
-    const isOutOfStock = hasInventoryLimit && inventoryCount <= 0;
+    const hasInventoryLimit = String(product?.fulfillment_provider || '').toLowerCase() !== 'printful'
+        && Number.isFinite(inventoryCount) && inventoryCount >= 0;
+    const hasAvailableVariant = Number(product?.is_apparel) !== 1
+        || (Array.isArray(product?.variants) && product.variants.some((variant) => Number(variant.is_available) === 1));
+    const isOutOfStock = (hasInventoryLimit && inventoryCount <= 0) || !hasAvailableVariant;
     const quantityMax = hasInventoryLimit ? `max="${inventoryCount}"` : '';
 
     return `
@@ -2062,7 +2035,7 @@ function getProductPurchaseControls(product) {
                 class="btn-primary add-to-cart-button"
                 onclick="addProductToCartFromDetails(${productId}, event)"
                 ${isOutOfStock ? 'disabled' : ''}>
-            ${isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+            ${!hasAvailableVariant ? 'Size Mapping Unavailable' : (isOutOfStock ? 'Out of Stock' : 'Add to Cart')}
         </button>
     `;
 }
@@ -2126,6 +2099,7 @@ async function fetchProductDetailsData(productId) {
     }
 
     const formatOptions = Array.isArray(data.format_options) ? data.format_options : [];
+    product.variants = Array.isArray(data.variants) ? data.variants : [];
 
     return {
         product,
@@ -2434,9 +2408,9 @@ function checkoutWithLogin() {
     window.location.href = `/login.php?return_to=${encodeURIComponent(getCheckoutReturnTo())}`;
 }
 
-function continueCheckoutWithAccount() {
+async function continueCheckoutWithAccount() {
     hideCheckoutChoices();
-    showCartStatus('Account checkout is not connected yet.');
+    await openAccountCheckout();
 }
 
 function continueCheckoutAsGuest() {
@@ -2446,7 +2420,112 @@ function continueCheckoutAsGuest() {
     }
 
     hideCheckoutChoices();
-    showCartStatus('Guest checkout is not connected yet.');
+    showCartStatus('Guest checkout is not available yet. Log in or register to prepare an order.');
+}
+
+const checkoutPreparationState = { csrf: '', quoteToken: '', rates: [], context: null };
+const checkoutRegions = {
+    US: ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'],
+    CA: ['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT']
+};
+
+async function checkoutApi(body = null) {
+    const options = { cache: 'no-store', headers: { Accept: 'application/json' } };
+    if (body) {
+        options.method = 'POST';
+        options.headers['Content-Type'] = 'application/json';
+        options.headers['X-CSRF-Token'] = checkoutPreparationState.csrf;
+        options.body = JSON.stringify(body);
+    }
+    const response = await fetch('/customer/api/checkout.php', options);
+    const data = await response.json().catch(() => ({ success: false, message: 'Checkout returned an invalid response.' }));
+    if (!response.ok || !data.success) throw new Error(data.message || 'Checkout is unavailable.');
+    if (data.csrf_token) checkoutPreparationState.csrf = data.csrf_token;
+    return data;
+}
+
+async function openAccountCheckout() {
+    const itemContainer = document.getElementById('cartItemsContainer');
+    if (!itemContainer) return;
+    itemContainer.innerHTML = '<p class="cart-empty-state">Loading secure checkout…</p>';
+    try {
+        const context = await checkoutApi();
+        checkoutPreparationState.context = context;
+        const profile = context.profile || {};
+        const country = String(profile.country || '').toLowerCase().includes('canada') ? 'CA' : 'US';
+        itemContainer.innerHTML = `
+            <form id="accountCheckoutForm" class="checkout-address-form">
+                <h3>Shipping address</h3>
+                <div class="checkout-field-row"><label>Full name<input name="name" required value="${escapeHtml(`${profile.first_name || ''} ${profile.last_name || ''}`.trim())}"></label><label>Email<input name="email" type="email" required value="${escapeHtml(profile.email_address || '')}"></label></div>
+                <label>Phone<input name="phone" value="${escapeHtml(profile.phone || '')}"></label>
+                <label>Address<input name="address1" required value="${escapeHtml(profile.address_1 || '')}"></label>
+                <label>Address line 2<input name="address2" value="${escapeHtml(profile.address_2 || '')}"></label>
+                <div class="checkout-field-row"><label>City<input name="city" required value="${escapeHtml(profile.city || '')}"></label><label>Country<select name="country_code" id="checkoutCountry"><option value="US" ${country === 'US' ? 'selected' : ''}>United States</option><option value="CA" ${country === 'CA' ? 'selected' : ''}>Canada</option></select></label></div>
+                <div class="checkout-field-row"><label>State / province<select name="state_code" id="checkoutRegion" required></select></label><label>ZIP / postal code<input name="postal_code" required value="${escapeHtml(profile.postal_code || '')}"></label></div>
+                <button class="btn-primary" type="submit">Get live shipping rates</button>
+                <div id="checkoutRates" class="checkout-rates"></div>
+            </form>`;
+        populateCheckoutRegions(profile.state_code || '');
+        document.getElementById('checkoutCountry')?.addEventListener('change', () => { populateCheckoutRegions(''); invalidateCheckoutQuote(); });
+        document.getElementById('accountCheckoutForm')?.addEventListener('input', invalidateCheckoutQuote);
+        document.getElementById('accountCheckoutForm')?.addEventListener('submit', requestCheckoutQuote);
+    } catch (error) {
+        itemContainer.innerHTML = `<p class="cart-empty-state">${escapeHtml(error.message)}</p>`;
+    }
+}
+
+function populateCheckoutRegions(selected) {
+    const country = document.getElementById('checkoutCountry')?.value || 'US';
+    const select = document.getElementById('checkoutRegion');
+    if (!select) return;
+    select.innerHTML = '<option value="">Select</option>' + checkoutRegions[country].map(code => `<option value="${code}" ${String(selected).toUpperCase() === code ? 'selected' : ''}>${code}</option>`).join('');
+}
+
+function checkoutCartPayload() {
+    return shoppingCartState.items.map(item => ({ product_id: item.id, product_variant_id: item.productVariantId || null, quantity: item.quantity }));
+}
+
+function checkoutAddressPayload(form) {
+    return Object.fromEntries(new FormData(form));
+}
+
+function invalidateCheckoutQuote(event) {
+    if (event?.target?.closest?.('#checkoutRates')) return;
+    checkoutPreparationState.quoteToken = ''; checkoutPreparationState.rates = [];
+    const rates = document.getElementById('checkoutRates'); if (rates) rates.innerHTML = '';
+}
+
+async function requestCheckoutQuote(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true; button.textContent = 'Calculating…';
+    try {
+        const data = await checkoutApi({ action: 'quote', cart: checkoutCartPayload(), address: checkoutAddressPayload(form) });
+        checkoutPreparationState.quoteToken = data.quote_token || '';
+        checkoutPreparationState.rates = data.rates || [];
+        const rates = document.getElementById('checkoutRates');
+        const choices = data.requires_printful_shipping
+            ? data.rates.map((rate, index) => `<label class="checkout-rate"><input type="radio" name="shipping_rate" value="${escapeHtml(rate.id)}" ${index === 0 ? 'checked' : ''}><span><strong>${escapeHtml(rate.name)}</strong><small>${formatCartCurrency(rate.rate)}${rate.min_delivery_date ? ` · ${escapeHtml(rate.min_delivery_date)}–${escapeHtml(rate.max_delivery_date || rate.min_delivery_date)}` : ''}</small></span></label>`).join('')
+            : '<p>No Printful shipping is required for this cart.</p>';
+        rates.innerHTML = `<h3>Shipping method</h3>${choices}<p><strong>Authoritative subtotal: ${formatCartCurrency(data.subtotal)}</strong></p><button type="button" class="btn-primary" id="prepareCheckoutOrder">Prepare order</button><p class="checkout-payment-note">Payment integration is not yet configured. Preparing the order will not charge you or start fulfillment.</p>`;
+        document.getElementById('prepareCheckoutOrder')?.addEventListener('click', prepareCheckoutOrder);
+    } catch (error) { showCartStatus(error.message); }
+    finally { button.disabled = false; button.textContent = 'Get live shipping rates'; }
+}
+
+async function prepareCheckoutOrder() {
+    const form = document.getElementById('accountCheckoutForm');
+    const button = document.getElementById('prepareCheckoutOrder');
+    if (!form || !button) return;
+    const rateId = form.querySelector('input[name="shipping_rate"]:checked')?.value || '';
+    button.disabled = true; button.textContent = 'Preparing…';
+    try {
+        const data = await checkoutApi({ action: 'prepare_order', cart: checkoutCartPayload(), address: checkoutAddressPayload(form), quote_token: checkoutPreparationState.quoteToken, rate_id: rateId });
+        shoppingCartState.items = []; saveShoppingCart(); renderShoppingCart();
+        const itemContainer = document.getElementById('cartItemsContainer');
+        if (itemContainer) itemContainer.innerHTML = `<div class="cart-empty-state"><h3>Order ${escapeHtml(data.order_number)} prepared</h3><p>${escapeHtml(data.message)}</p><p>Total: <strong>${formatCartCurrency(data.total)}</strong></p></div>`;
+    } catch (error) { showCartStatus(error.message); button.disabled = false; button.textContent = 'Prepare order'; }
 }
 
 function resumeCheckoutPromptFromUrl() {
@@ -2501,6 +2580,7 @@ function normalizeCartItem(item) {
     }
 
     const sizeValue = String(item?.sizeValue ?? '').trim();
+    const productVariantId = Number.parseInt(item?.productVariantId ?? sizeValue ?? 0, 10) || null;
     const key = item?.key || getCartItemKey(id, sizeValue);
     const inventoryCount = item?.inventoryCount === null || item?.inventoryCount === undefined
         ? null
@@ -2514,6 +2594,7 @@ function normalizeCartItem(item) {
         price,
         image: String(item?.image ?? ''),
         sizeValue,
+        productVariantId,
         sizeLabel: String(item?.sizeLabel ?? ''),
         quantity,
         inventoryCount: Number.isFinite(inventoryCount) && inventoryCount >= 0 ? inventoryCount : null
@@ -2702,8 +2783,10 @@ function addProductToCart(product, options = {}) {
     const quantity = Math.max(1, Number.parseInt(options.quantity ?? 1, 10) || 1);
     const sizeValue = String(options.sizeValue ?? '').trim();
     const sizeLabel = String(options.sizeLabel ?? '').trim();
+    const productVariantId = Number.parseInt(options.productVariantId ?? sizeValue ?? 0, 10) || null;
     const inventoryCount = Number.parseInt(product?.inventory_count ?? '', 10);
-    const hasInventoryLimit = Number.isFinite(inventoryCount) && inventoryCount >= 0;
+    const hasInventoryLimit = String(product?.fulfillment_provider || '').toLowerCase() !== 'printful'
+        && Number.isFinite(inventoryCount) && inventoryCount >= 0;
 
     if (!id || !name || !Number.isFinite(price)) {
         showCartStatus('Unable to add this product to the cart.');
@@ -2733,6 +2816,7 @@ function addProductToCart(product, options = {}) {
             price,
             image: resolveProductImageSrc(product?.image_url),
             sizeValue,
+            productVariantId,
             sizeLabel,
             quantity: clampedQuantity,
             inventoryCount: hasInventoryLimit ? inventoryCount : null
@@ -2785,6 +2869,7 @@ async function addProductToCartFromDetails(productId, event = null) {
         addProductToCart(product, {
             quantity,
             sizeValue: sizeSelect?.value || '',
+            productVariantId: sizeSelect?.value || null,
             sizeLabel: sizeSelect?.selectedOptions?.[0]?.textContent?.trim() || ''
         });
     } catch (error) {
@@ -3770,7 +3855,7 @@ function renderCustomerOrders() {
 
     container.innerHTML = customerProfileState.orders.map((order) => {
         const currency = order.currency_code || order.items?.[0]?.currency_code || 'USD';
-        const status = order.transaction_status || order.order_status || 'Processing';
+        const status = order.order_status || 'Processing';
         const statusClass = String(status).toLowerCase().replace(/[^a-z0-9]+/g, '-');
         const items = Array.isArray(order.items) ? order.items : [];
         const itemMarkup = items.length > 0
@@ -3784,6 +3869,8 @@ function renderCustomerOrders() {
                 </li>
             `).join('')}</ul>`
             : '<p class="customer-profile__order-empty">Item details are not available for this order.</p>';
+        const shipments = Array.isArray(order.shipments) ? order.shipments : [];
+        const shipmentMarkup = shipments.length ? `<div class="customer-order-shipments"><h4>Shipments</h4>${shipments.map(shipment => `<p><strong>${escapeHtml(shipment.carrier || shipment.vendor_name || 'Shipment')}</strong> · ${escapeHtml(shipment.shipment_status || 'Processing')}${shipment.tracking_number ? ` · <a href="${escapeHtml(shipment.tracking_url || '#')}" ${shipment.tracking_url ? 'target="_blank" rel="noopener noreferrer"' : ''}>${escapeHtml(shipment.tracking_number)}</a>` : ''}${shipment.shipped_at ? ` · Shipped ${escapeHtml(formatCustomerDate(shipment.shipped_at, { short: true }))}` : ''}${shipment.estimated_delivery_at ? ` · Estimated ${escapeHtml(formatCustomerDate(shipment.estimated_delivery_at, { short: true }))}` : ''}</p>`).join('')}</div>` : '';
 
         return `
             <details class="customer-profile__order">
@@ -3799,6 +3886,11 @@ function renderCustomerOrders() {
                 </summary>
                 <div class="customer-profile__order-body">
                     ${itemMarkup}
+                    <dl>
+                        <div><dt>Payment</dt><dd>${escapeHtml(order.payment_status || 'unpaid')}</dd></div>
+                        <div><dt>Fulfillment</dt><dd>${escapeHtml(order.fulfillment_status || 'pending')}</dd></div>
+                    </dl>
+                    ${shipmentMarkup}
                     <dl>
                         <div><dt>Subtotal</dt><dd>${escapeHtml(formatCustomerMoney(order.subtotal_amount, currency))}</dd></div>
                         <div><dt>Shipping</dt><dd>${escapeHtml(formatCustomerMoney(order.shipping_amount, currency))}</dd></div>

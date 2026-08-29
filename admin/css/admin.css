@@ -1287,6 +1287,13 @@ tbody tr:hover {
 }
 
 /* OPTIONAL: STRIPED ROWS */
+
+.printful-panel { margin-top: 1.5rem; padding: 1.25rem; }
+.printful-panel h2 { margin-top: 0; }
+.printful-variant-mappings { display: grid; gap: .65rem; margin: 1rem 0; }
+.printful-mapping-row { display: grid; grid-template-columns: minmax(90px, .3fr) minmax(260px, 1fr); align-items: center; gap: 1rem; }
+.printful-mapping-row select { width: 100%; }
+@media (max-width: 700px) { .printful-mapping-row { grid-template-columns: 1fr; gap: .25rem; } }
 tbody tr:nth-child(even) {
     background-color: #ffffff;
 }
