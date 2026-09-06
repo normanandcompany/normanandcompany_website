@@ -36,6 +36,12 @@ if (!printfulMigrationIndexExists($pdo, 'vendors', 'uq_vendors_fulfillment_provi
     $pdo->exec('ALTER TABLE vendors ADD UNIQUE KEY uq_vendors_fulfillment_provider (fulfillment_provider)');
 }
 $pdo->exec("UPDATE vendors SET fulfillment_provider = 'printful' WHERE LOWER(TRIM(vendor_name)) = 'printful' AND fulfillment_provider IS NULL");
+$pdo->exec("INSERT INTO vendors (vendor_name, fulfillment_provider, visible, is_active)
+    SELECT 'Printful', 'printful', 1, 1
+    WHERE NOT EXISTS (
+        SELECT 1 FROM vendors
+        WHERE fulfillment_provider = 'printful' OR LOWER(TRIM(vendor_name)) = 'printful'
+    )");
 
 printfulMigrationAddColumns($pdo, 'apparel_sizes', [
     'is_active' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER name',
