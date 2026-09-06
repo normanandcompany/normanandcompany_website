@@ -77,7 +77,7 @@ if ($adminJsVersion === '') {
                 <li><a href="#" onclick="loadPage('calendar')">Calendar</a></li>
                 <li><a href="#" onclick="loadPage('tasks')">Tasks</a></li>
                 <li><a href="#" onclick="loadPage('products')">Products</a></li>
-                <li><a href="#" onclick="loadPage('printful')">Printful Fulfillment</a></li>
+                <li><a href="#" onclick="loadPage('printful')">Printful Linking</a></li>
                 <li><a href="#" onclick="loadPage('users')">Users</a></li>
                 <li><a href="#" onclick="loadPage('bookchooser')">Sweepstakes</a></li>
                 <li><a href="#" onclick="loadPage('transactions')">Transactions</a></li>

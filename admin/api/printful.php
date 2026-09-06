@@ -214,7 +214,7 @@ try {
         if ($externalProductId === '' || !is_array($mappings) || $mappings === []) {
             throw new InvalidArgumentException('Select a Printful product and at least one fulfillment variant.');
         }
-        $productStmt = $pdo->prepare('SELECT is_apparel, apparel_size_type, product_category_id FROM products WHERE id = :id AND is_active = 1');
+        $productStmt = $pdo->prepare('SELECT price, is_apparel, apparel_size_type, product_category_id FROM products WHERE id = :id AND is_active = 1');
         $productStmt->execute([':id' => $productId]);
         $localProduct = $productStmt->fetch(PDO::FETCH_ASSOC);
         if (!$localProduct) throw new InvalidArgumentException('Local product not found.');
@@ -259,7 +259,7 @@ try {
         $sizeTable = $sizeType === 'adult' ? 'apparel_sizes' : 'childrens_apparel_sizes';
         $sizeColumn = $sizeType === 'adult' ? 'adult_size_id' : 'childrens_size_id';
         $otherColumn = $sizeType === 'adult' ? 'childrens_size_id' : 'adult_size_id';
-        $selectedVariantIds = [];
+        $pricingVariants = [];
         foreach ($mappings as $mapping) {
             $sizeId = printfulAdminPositiveId($mapping['size_id'] ?? null, 'local size');
             $externalVariantId = trim((string) ($mapping['external_variant_id'] ?? ''));
@@ -275,22 +275,43 @@ try {
             if (!$localVariantId) { $find = $pdo->prepare("SELECT id FROM product_variants WHERE product_id = :product_id AND {$sizeColumn} = :size_id"); $find->execute([':product_id' => $productId, ':size_id' => $sizeId]); $localVariantId = (int) $find->fetchColumn(); }
             $variant = $remoteById[$externalVariantId];
             $variantName = (string) ($variant['name'] ?? $variant['product']['name'] ?? '');
-            $existingExternal = $pdo->prepare('SELECT external_variant_id FROM vendor_variant_mappings WHERE product_variant_id = :variant_id AND vendor_product_mapping_id = :mapping_id');
-            $existingExternal->execute([':variant_id' => $localVariantId, ':mapping_id' => $mappingId]);
-            $previousExternalVariantId = $existingExternal->fetchColumn();
-            if ($previousExternalVariantId !== false && (string) $previousExternalVariantId !== $externalVariantId) {
-                $pdo->prepare('UPDATE product_variants SET price_adjustment = 0.00 WHERE id = :id')->execute([':id' => $localVariantId]);
-            }
+            $pdo->prepare('UPDATE product_variants SET price_adjustment = 0.00 WHERE id = :id')->execute([':id' => $localVariantId]);
             if (is_numeric($variant['retail_price'] ?? null)) {
+                $currency = strtoupper((string) ($variant['currency'] ?? 'USD'));
                 $priceStmt = $pdo->prepare('UPDATE product_variants SET printful_retail_price = :price, printful_currency = :currency, printful_price_synced_at = NOW() WHERE id = :id');
-                $priceStmt->execute([':price' => number_format((float) $variant['retail_price'], 2, '.', ''), ':currency' => strtoupper((string) ($variant['currency'] ?? 'USD')), ':id' => $localVariantId]);
+                $priceStmt->execute([':price' => number_format((float) $variant['retail_price'], 2, '.', ''), ':currency' => $currency, ':id' => $localVariantId]);
+                if ($currency === 'USD') {
+                    $pricingVariants[] = [
+                        'local_variant_id' => $localVariantId,
+                        'remote_price' => $variant['retail_price']
+                    ];
+                }
             }
             $stmt = $pdo->prepare("INSERT INTO vendor_variant_mappings (product_variant_id, vendor_product_mapping_id, external_variant_id, external_catalog_variant_id, external_variant_name, external_sku, external_color, external_size, availability_status, external_data_json, is_active, last_synced_at) VALUES (:variant_id, :mapping_id, :external_id, :catalog_id, :name, :sku, :color, :size, :availability, :data, 1, NOW()) ON DUPLICATE KEY UPDATE external_variant_id = VALUES(external_variant_id), external_catalog_variant_id = VALUES(external_catalog_variant_id), external_variant_name = VALUES(external_variant_name), external_sku = VALUES(external_sku), external_color = VALUES(external_color), external_size = VALUES(external_size), availability_status = VALUES(availability_status), external_data_json = VALUES(external_data_json), is_active = 1, last_synced_at = NOW()");
             $stmt->execute([':variant_id' => $localVariantId, ':mapping_id' => $mappingId, ':external_id' => $externalVariantId, ':catalog_id' => $catalogVariantId, ':name' => $variantName, ':sku' => $variant['sku'] ?? null, ':color' => $mapping['color'] ?? null, ':size' => $mapping['size'] ?? $size['name'], ':availability' => $variant['availability_status'] ?? ($variant['synced'] ?? true ? 'active' : 'unsynced'), ':data' => json_encode($variant, JSON_THROW_ON_ERROR)]);
-            $selectedVariantIds[] = $localVariantId;
+        }
+
+        $pricingApplied = count($pricingVariants) === count($mappings);
+        if ($pricingApplied) {
+            $pricing = PrintfulVariantPricing::calculate((float) $localProduct['price'], $pricingVariants, PrintfulVariantPricing::MODE_DIFFERENCE);
+            $priceUpdate = $pdo->prepare('UPDATE product_variants SET price_adjustment = :adjustment WHERE id = :id AND product_id = :product_id');
+            foreach ($pricing['variants'] as $pricedVariant) {
+                $priceUpdate->execute([
+                    ':adjustment' => $pricedVariant['price_adjustment'],
+                    ':id' => $pricedVariant['local_variant_id'],
+                    ':product_id' => $productId
+                ]);
+            }
+            $pdo->prepare('UPDATE vendor_product_mappings SET pricing_mode = :mode, pricing_synced_at = NOW() WHERE id = :id')->execute([
+                ':mode' => PrintfulVariantPricing::MODE_DIFFERENCE,
+                ':id' => $mappingId
+            ]);
         }
         $pdo->commit();
-        printfulAdminJson(['success' => true, 'message' => 'Printful product and size mappings saved.']);
+        $message = $pricingApplied
+            ? 'Printful sizes mapped and larger-size pricing applied automatically.'
+            : 'Printful sizes mapped. Pricing could not be automated because Printful did not return USD retail prices for every size.';
+        printfulAdminJson(['success' => true, 'message' => $message, 'pricing_applied' => $pricingApplied]);
     }
     if ($action === 'retry_fulfillment') {
         $orderId = printfulAdminPositiveId($_POST['order_id'] ?? null, 'order');

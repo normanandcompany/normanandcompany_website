@@ -6061,6 +6061,13 @@ function printfulAdminAlert(message, error = false) {
     alert.textContent = message; alert.dataset.type = error ? 'error' : 'success'; alert.hidden = false;
 }
 
+function formatPrintfulEnvironment(value) {
+    return String(value || 'production')
+        .trim()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
 async function initPrintfulAdmin() {
     const app = document.getElementById('printfulAdminApp');
     if (!app) return;
@@ -6069,17 +6076,17 @@ async function initPrintfulAdmin() {
     document.getElementById('printfulMappingForm')?.addEventListener('submit', savePrintfulMapping);
     app.querySelectorAll('[data-printful-size-form]').forEach(form => form.addEventListener('submit', savePrintfulSize));
     document.getElementById('printfulSyncProduct')?.addEventListener('change', loadPrintfulSyncVariants);
-    document.getElementById('printfulLocalProduct')?.addEventListener('change', () => {
-        renderPrintfulVariantMappings();
-        resetPrintfulPricingPreview();
-    });
+    document.getElementById('printfulLocalProduct')?.addEventListener('change', handlePrintfulLocalProductChange);
     document.getElementById('printfulPricingMode')?.addEventListener('change', resetPrintfulPricingPreview);
     document.getElementById('printfulVariantMappings')?.addEventListener('change', updatePrintfulMappingReviewStatus);
     await loadPrintfulAdminContext();
+    try { await loadPrintfulSyncProducts(false); }
+    catch (error) { printfulAdminAlert(error.message, true); }
 }
 
 async function loadPrintfulAdminContext() {
     try {
+        const selectedLocalProductId = document.getElementById('printfulLocalProduct')?.value || '';
         const data = await printfulAdminRequest('context');
         printfulAdminState.context = data;
         const config = data.configuration || {};
@@ -6102,16 +6109,62 @@ async function loadPrintfulAdminContext() {
             <div class="product-metric"><span>${adminEscapeHtml(connectionMessage)}</span><small>Connection</small></div>
             <div class="product-metric"><span>${adminEscapeHtml(storeAccess)}</span><small>Store access${liveDiagnostics ? ` · ${syncedProductCount} products` : ''}</small></div>
             <div class="product-metric"><span>${config.auto_confirm ? 'Enabled' : 'Disabled'}</span><small>Auto-confirm</small></div>
-            <div class="product-metric"><span>${adminEscapeHtml(config.app_environment || 'production')}</span><small>Environment</small></div>
+            <div class="product-metric"><span>${adminEscapeHtml(formatPrintfulEnvironment(config.app_environment))}</span><small>Environment</small></div>
             <div class="product-metric"><span>${config.webhook_secret_configured ? (webhookConfigured ? 'Active' : 'Secret configured') : 'Missing secret'}</span><small>Webhook</small></div>
             <div class="product-metric"><span>${adminEscapeHtml(lastSuccessfulCall)}</span><small>Last successful API call</small></div>`;
         const local = document.getElementById('printfulLocalProduct');
-        if (local) local.innerHTML = '<option value="">Select product</option>' + (data.products || []).map(product => `<option value="${Number(product.id)}">${adminEscapeHtml(product.product_name)}${product.external_product_id ? ` — mapped (${adminEscapeHtml(product.mapped_variant_count)}/${adminEscapeHtml(product.variant_count)})` : ''}</option>`).join('');
+        if (local) {
+            local.innerHTML = '<option value="">Select product</option>' + (data.products || []).map(product => `<option value="${Number(product.id)}">${adminEscapeHtml(product.product_name)}${product.external_product_id ? ` — mapped (${adminEscapeHtml(product.mapped_variant_count)}/${adminEscapeHtml(product.variant_count)})` : ''}</option>`).join('');
+            if ([...local.options].some(option => option.value === selectedLocalProductId)) local.value = selectedLocalProductId;
+        }
         renderPrintfulSizeCatalog('adult', data.adult_sizes || []);
         renderPrintfulSizeCatalog('children', data.childrens_sizes || []);
         renderPrintfulFulfillments(data.fulfillments || []);
         renderPrintfulVariantMappings();
     } catch (error) { printfulAdminAlert(error.message, true); }
+}
+
+function normalizePrintfulProductName(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+async function loadPrintfulSyncProducts(showAlert = true) {
+    const data = await printfulAdminRequest('sync_products');
+    printfulAdminState.syncProducts = data.products || [];
+    const select = document.getElementById('printfulSyncProduct');
+    const selectedExternalProductId = select?.value || '';
+    if (select) {
+        select.innerHTML = '<option value="">Select Printful product</option>' + printfulAdminState.syncProducts.map(product => `<option value="${adminEscapeHtml(product.id)}">${adminEscapeHtml(product.name)} · #${adminEscapeHtml(product.id)} · ${Number(product.synced || 0)}/${Number(product.variants || 0)} synced</option>`).join('');
+        if ([...select.options].some(option => option.value === selectedExternalProductId)) select.value = selectedExternalProductId;
+    }
+    await selectPrintfulProductForLocal();
+    if (showAlert) printfulAdminAlert(`${printfulAdminState.syncProducts.length} Printful products loaded.`);
+}
+
+async function selectPrintfulProductForLocal() {
+    const localProduct = printfulSelectedLocalProduct();
+    const select = document.getElementById('printfulSyncProduct');
+    if (!select || !localProduct || !printfulAdminState.syncProducts.length) {
+        printfulAdminState.syncVariants = [];
+        renderPrintfulVariantMappings();
+        return;
+    }
+
+    let externalProductId = String(localProduct.external_product_id || '');
+    if (!externalProductId) {
+        const localName = normalizePrintfulProductName(localProduct.product_name);
+        const exactMatches = printfulAdminState.syncProducts.filter(product => normalizePrintfulProductName(product.name) === localName);
+        if (exactMatches.length === 1) externalProductId = String(exactMatches[0].id);
+    }
+
+    select.value = [...select.options].some(option => option.value === externalProductId) ? externalProductId : '';
+    await loadPrintfulSyncVariants();
+}
+
+async function handlePrintfulLocalProductChange() {
+    resetPrintfulPricingPreview();
+    renderPrintfulVariantMappings();
+    await selectPrintfulProductForLocal();
 }
 
 async function handlePrintfulAdminClick(event) {
@@ -6127,13 +6180,7 @@ async function handlePrintfulAdminClick(event) {
     }
     if (!action) return;
     try {
-        if (action === 'refresh') { await loadPrintfulAdminContext(); printfulAdminAlert('Printful administration refreshed.'); }
-        if (action === 'load-products') {
-            const data = await printfulAdminRequest('sync_products'); printfulAdminState.syncProducts = data.products || [];
-            const select = document.getElementById('printfulSyncProduct');
-            select.innerHTML = '<option value="">Select Printful product</option>' + printfulAdminState.syncProducts.map(product => `<option value="${adminEscapeHtml(product.id)}">${adminEscapeHtml(product.name)} · #${adminEscapeHtml(product.id)} · ${Number(product.synced || 0)}/${Number(product.variants || 0)} synced</option>`).join('');
-            printfulAdminAlert(`${printfulAdminState.syncProducts.length} Printful products loaded.`);
-        }
+        if (action === 'refresh') { await loadPrintfulAdminContext(); await loadPrintfulSyncProducts(false); printfulAdminAlert('Printful administration refreshed.'); }
         if (action === 'preview-pricing') await previewPrintfulPricing();
         if (action === 'apply-pricing') await applyPrintfulPricing();
         if (action === 'retry') {
@@ -6253,7 +6300,12 @@ async function savePrintfulMapping(event) {
         return { size_id: Number(select.dataset.localSizeId), external_variant_id: select.value, size: variant.size || '', color: variant.color || '' };
     });
     const body = new FormData(form); body.set('mappings', JSON.stringify(mappings));
-    try { const data = await printfulAdminRequest('save_mapping', { method: 'POST', body }); printfulAdminAlert(data.message); await loadPrintfulAdminContext(); }
+    try {
+        const data = await printfulAdminRequest('save_mapping', { method: 'POST', body });
+        await loadPrintfulAdminContext();
+        await selectPrintfulProductForLocal();
+        printfulAdminAlert(data.message);
+    }
     catch (error) { printfulAdminAlert(error.message, true); }
 }
 

@@ -3,34 +3,33 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/api/auth.php';
 requireRole('admin');
 ?>
 <section class="product-manager printful-manager" id="printfulAdminApp">
-    <div id="page-title-meta" data-title="Norman and Company | Printful Fulfillment" hidden></div>
-    <div class="product-manager-header"><div><p class="section-kicker">Vendor Fulfillment</p><h1>Printful</h1></div><button class="btn-secondary" type="button" data-printful-action="refresh">Refresh</button></div>
+    <div id="page-title-meta" data-title="Norman and Company | Printful Linking" hidden></div>
+    <div class="product-manager-header"><div><h1>Printful Linking</h1></div><button class="btn-secondary" type="button" data-printful-action="refresh">Refresh</button></div>
     <div id="printfulAlert" class="product-alert" role="status" aria-live="polite" hidden></div>
 
     <div class="product-metrics" id="printfulDiagnostics"><div class="product-metric"><span>…</span><small>Connection</small></div></div>
 
     <div class="card printful-panel">
         <h2>Product and variant mapping</h2>
-        <p>The product's size catalog comes from Product Management. Choose the matching Printful product, then review the exact variants used for fulfillment.</p>
+        <p>Choose the matching Printful product. Available sizes are matched automatically, and Printful's larger-size price differences are applied when you save.</p>
         <form id="printfulMappingForm" class="product-form">
             <div class="product-field-row two-column">
                 <div class="form-group stacked"><label for="printfulLocalProduct">Local product</label><select id="printfulLocalProduct" name="product_id" required><option value="">Select product</option></select></div>
-                <div class="form-group stacked"><label for="printfulSyncProduct">Printful Sync Product</label><select id="printfulSyncProduct" name="external_product_id" required><option value="">Load products first</option></select></div>
+                <div class="form-group stacked"><label for="printfulSyncProduct">Printful Sync Product</label><select id="printfulSyncProduct" name="external_product_id" required><option value="">Loading Printful products…</option></select></div>
             </div>
             <p id="printfulProductSizingSummary" class="printful-sizing-summary">Select a local product to see its size catalog.</p>
-            <button type="button" class="btn-secondary" data-printful-action="load-products">Load Printful products</button>
             <details class="printful-mapping-review">
                 <summary>Fulfillment variant review <span id="printfulMappingReviewStatus"></span></summary>
                 <div id="printfulVariantMappings" class="printful-variant-mappings"><p>Select a product and load its Printful variants.</p></div>
             </details>
             <p class="product-alert" data-type="warning">Verify that every mapped Printful variant is the same color. The local store intentionally represents each color as a separate product.</p>
-            <div class="product-dialog-actions"><button type="submit" class="btn-primary">Save mapping</button></div>
+            <div class="product-dialog-actions"><button type="submit" class="btn-primary">Save sizes and pricing</button></div>
         </form>
 
         <section class="printful-pricing-tools" aria-labelledby="printfulPricingTitle">
             <div>
-                <h3 id="printfulPricingTitle">Variant pricing</h3>
-                <p>Preview pricing for the selected local product after its mapping has been saved.</p>
+                <h3 id="printfulPricingTitle">Advanced variant pricing</h3>
+                <p>Larger-size differences are applied automatically when a mapping is saved. Use these controls only to review prices or copy Printful retail prices exactly.</p>
             </div>
             <div class="product-field-row two-column">
                 <div class="form-group stacked">
