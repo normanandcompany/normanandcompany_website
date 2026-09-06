@@ -47,6 +47,16 @@ $pricedHash = CheckoutService::cartHash([['product_id' => 1, 'product_variant_id
 $repricedHash = CheckoutService::cartHash([['product_id' => 1, 'product_variant_id' => 3, 'quantity' => 1, 'unit_price' => '27.59']]);
 $assert(!hash_equals($pricedHash, $repricedHash), 'Price changes must invalidate a checkout quote.');
 
+$shippingItems = CheckoutService::shippingRateItems([
+    ['external_variant_id' => '999111', 'shipping_variant_id' => '4012', 'quantity' => 2]
+]);
+$assert($shippingItems === [['variant_id' => 4012, 'quantity' => 2]], 'Shipping rates must use the Printful catalog variant ID, not the Sync Variant ID.');
+try {
+    CheckoutService::shippingRateItems([['external_variant_id' => '999111', 'quantity' => 1]]);
+    $failures[] = 'A missing Printful catalog variant ID was accepted for shipping.';
+} catch (InvalidArgumentException) {
+}
+
 if ($failures) {
     fwrite(STDERR, implode("\n", $failures) . "\n");
     exit(1);

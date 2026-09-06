@@ -246,13 +246,15 @@ try {
             $externalVariantId = trim((string) ($mappings[0]['external_variant_id'] ?? ''));
             if ($externalVariantId === '' || !isset($remoteById[$externalVariantId])) throw new InvalidArgumentException('Select one Printful Sync Variant for the standard product.');
             $variant = $remoteById[$externalVariantId];
-            $stmt = $pdo->prepare('UPDATE vendor_product_mappings SET default_external_variant_id = :external_id, default_external_variant_name = :name, default_external_sku = :sku, default_availability_status = :availability WHERE id = :id');
-            $stmt->execute([':external_id' => $externalVariantId, ':name' => $variant['name'] ?? $variant['product']['name'] ?? null, ':sku' => $variant['sku'] ?? null, ':availability' => $variant['availability_status'] ?? (!empty($variant['synced']) ? 'active' : 'unsynced'), ':id' => $mappingId]);
+            $catalogVariantId = trim((string) ($variant['variant_id'] ?? ''));
+            if ($catalogVariantId === '') throw new InvalidArgumentException('Printful did not provide the catalog variant required for shipping rates.');
+            $stmt = $pdo->prepare('UPDATE vendor_product_mappings SET default_external_variant_id = :external_id, default_external_catalog_variant_id = :catalog_id, default_external_variant_name = :name, default_external_sku = :sku, default_availability_status = :availability WHERE id = :id');
+            $stmt->execute([':external_id' => $externalVariantId, ':catalog_id' => $catalogVariantId, ':name' => $variant['name'] ?? $variant['product']['name'] ?? null, ':sku' => $variant['sku'] ?? null, ':availability' => $variant['availability_status'] ?? (!empty($variant['synced']) ? 'active' : 'unsynced'), ':id' => $mappingId]);
             $pdo->commit();
             printfulAdminJson(['success' => true, 'message' => 'Printful standard product mapping saved.']);
         }
 
-        $pdo->prepare('UPDATE vendor_product_mappings SET default_external_variant_id = NULL, default_external_variant_name = NULL, default_external_sku = NULL, default_availability_status = NULL WHERE id = :id')->execute([':id' => $mappingId]);
+        $pdo->prepare('UPDATE vendor_product_mappings SET default_external_variant_id = NULL, default_external_catalog_variant_id = NULL, default_external_variant_name = NULL, default_external_sku = NULL, default_availability_status = NULL WHERE id = :id')->execute([':id' => $mappingId]);
 
         $sizeTable = $sizeType === 'adult' ? 'apparel_sizes' : 'childrens_apparel_sizes';
         $sizeColumn = $sizeType === 'adult' ? 'adult_size_id' : 'childrens_size_id';
@@ -262,6 +264,8 @@ try {
             $sizeId = printfulAdminPositiveId($mapping['size_id'] ?? null, 'local size');
             $externalVariantId = trim((string) ($mapping['external_variant_id'] ?? ''));
             if ($externalVariantId === '' || !isset($remoteById[$externalVariantId])) throw new InvalidArgumentException('Every selected local size must map to a variant from the selected Printful product.');
+            $catalogVariantId = trim((string) ($remoteById[$externalVariantId]['variant_id'] ?? ''));
+            if ($catalogVariantId === '') throw new InvalidArgumentException('Printful did not provide the catalog variant required for shipping rates.');
             $sizeStmt = $pdo->prepare("SELECT name, sort_order FROM {$sizeTable} WHERE id = :id AND is_active = 1");
             $sizeStmt->execute([':id' => $sizeId]); $size = $sizeStmt->fetch(PDO::FETCH_ASSOC);
             if (!$size) throw new InvalidArgumentException('A selected local size is inactive or missing.');
@@ -281,8 +285,8 @@ try {
                 $priceStmt = $pdo->prepare('UPDATE product_variants SET printful_retail_price = :price, printful_currency = :currency, printful_price_synced_at = NOW() WHERE id = :id');
                 $priceStmt->execute([':price' => number_format((float) $variant['retail_price'], 2, '.', ''), ':currency' => strtoupper((string) ($variant['currency'] ?? 'USD')), ':id' => $localVariantId]);
             }
-            $stmt = $pdo->prepare("INSERT INTO vendor_variant_mappings (product_variant_id, vendor_product_mapping_id, external_variant_id, external_variant_name, external_sku, external_color, external_size, availability_status, external_data_json, is_active, last_synced_at) VALUES (:variant_id, :mapping_id, :external_id, :name, :sku, :color, :size, :availability, :data, 1, NOW()) ON DUPLICATE KEY UPDATE external_variant_id = VALUES(external_variant_id), external_variant_name = VALUES(external_variant_name), external_sku = VALUES(external_sku), external_color = VALUES(external_color), external_size = VALUES(external_size), availability_status = VALUES(availability_status), external_data_json = VALUES(external_data_json), is_active = 1, last_synced_at = NOW()");
-            $stmt->execute([':variant_id' => $localVariantId, ':mapping_id' => $mappingId, ':external_id' => $externalVariantId, ':name' => $variantName, ':sku' => $variant['sku'] ?? null, ':color' => $mapping['color'] ?? null, ':size' => $mapping['size'] ?? $size['name'], ':availability' => $variant['availability_status'] ?? ($variant['synced'] ?? true ? 'active' : 'unsynced'), ':data' => json_encode($variant, JSON_THROW_ON_ERROR)]);
+            $stmt = $pdo->prepare("INSERT INTO vendor_variant_mappings (product_variant_id, vendor_product_mapping_id, external_variant_id, external_catalog_variant_id, external_variant_name, external_sku, external_color, external_size, availability_status, external_data_json, is_active, last_synced_at) VALUES (:variant_id, :mapping_id, :external_id, :catalog_id, :name, :sku, :color, :size, :availability, :data, 1, NOW()) ON DUPLICATE KEY UPDATE external_variant_id = VALUES(external_variant_id), external_catalog_variant_id = VALUES(external_catalog_variant_id), external_variant_name = VALUES(external_variant_name), external_sku = VALUES(external_sku), external_color = VALUES(external_color), external_size = VALUES(external_size), availability_status = VALUES(availability_status), external_data_json = VALUES(external_data_json), is_active = 1, last_synced_at = NOW()");
+            $stmt->execute([':variant_id' => $localVariantId, ':mapping_id' => $mappingId, ':external_id' => $externalVariantId, ':catalog_id' => $catalogVariantId, ':name' => $variantName, ':sku' => $variant['sku'] ?? null, ':color' => $mapping['color'] ?? null, ':size' => $mapping['size'] ?? $size['name'], ':availability' => $variant['availability_status'] ?? ($variant['synced'] ?? true ? 'active' : 'unsynced'), ':data' => json_encode($variant, JSON_THROW_ON_ERROR)]);
             $selectedVariantIds[] = $localVariantId;
         }
         $pdo->commit();

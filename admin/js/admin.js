@@ -6093,7 +6093,7 @@ async function loadPrintfulAdminContext() {
                 connectionMessage = error.message;
             }
         }
-        const webhookConfigured = Boolean(liveDiagnostics?.webhooks);
+        const webhookConfigured = Boolean(liveDiagnostics?.webhooks?.url);
         const storeAccess = liveDiagnostics?.store_access || '—';
         const syncedProductCount = Number(liveDiagnostics?.sync_product_count || 0);
         const lastSuccessfulCall = liveDiagnostics ? 'Just now' : (data.health?.last_success_at || 'Never');

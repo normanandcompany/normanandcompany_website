@@ -18,7 +18,12 @@ All prices, variants, shipping rates, totals, payment state, and fulfillment aut
 
 ## Database changes
 
-Run `database/migrations/2026_08_23_create_printful_fulfillment.php` with the migration database account. It is additive and MariaDB-compatible.
+Run these migrations in order with the migration database account. They are additive and MariaDB-compatible:
+
+1. `database/migrations/2026_08_23_create_printful_fulfillment.php`
+2. `database/migrations/2026_08_29_add_variant_pricing.php`
+3. `database/migrations/2026_08_29_sort_adult_apparel_sizes.php`
+4. `database/migrations/2026_09_06_add_printful_shipping_variant_ids.php`
 
 The migration:
 
@@ -48,7 +53,7 @@ Open **Admin -> Printful Fulfillment**.
 
 1. Load the live Printful Sync Products.
 2. Choose the local Norman & Company product (each color remains a different local product).
-3. Select Adult or Children's sizing.
+3. Confirm the automatically selected adult or children's size catalog from Product Management.
 4. Select the existing Printful Sync Product.
 5. Map each offered local size to one Sync Variant.
 6. Verify every selected Sync Variant represents the same color, then save.
@@ -69,7 +74,7 @@ The storefront product endpoint now returns product-specific active variants. Th
 
 Authenticated customer checkout calls `customer/api/checkout.php` with CSRF protection. Guest checkout still directs customers to log in or register because the existing `orders.user_id` is mandatory. Checkout currently supports `US` and `CA` only. US states, Canadian provinces/territories, US ZIP codes, and Canadian postal codes are validated separately.
 
-Only Printful items are sent to Printful's live shipping-rate endpoint. A quote is bound to hashes of the normalized server-validated cart and address, expires after a configured TTL, and can create only one order. Address, quantity, variant, cart, or expiration changes require a new quote. The selected rate is recovered from the server-stored response; browser-submitted amounts are ignored.
+Only Printful items are sent to Printful's live shipping-rate endpoint. Product mapping stores both identifiers returned by Printful: the Sync Variant ID is used to create a fulfillment order, while the catalog Variant ID is used to request shipping rates. A quote is bound to hashes of the normalized server-validated cart and address, expires after a configured TTL, and can create only one order. Address, quantity, variant, cart, or expiration changes require a new quote. The selected rate is recovered from the server-stored response; browser-submitted amounts are ignored.
 
 Mixed-vendor grouping is supported. Until another vendor receives its own shipping adapter, its shipping contribution is `0.00` and the checkout response says that non-Printful shipping is not configured.
 
@@ -136,6 +141,16 @@ Run syntax/unit tests first:
 /Applications/MAMP/bin/php/php8.4.17/bin/php tests/printful_unit.php
 ```
 
+After a real local product has been mapped to a Printful Sync Product, the guarded end-to-end test can exercise live US/Canada rates, stale quote protection, mixed-vendor grouping, the unpaid-order gate, an unconfirmed Printful draft, retry idempotency, webhook replay, and transactional multiple-package synchronization:
+
+```bash
+PRINTFUL_DEV_ALLOW_PAYMENT_OVERRIDE=true \
+  /Applications/MAMP/bin/php/php8.4.17/bin/php \
+  tests/printful_e2e.php --product=7 --user=1
+```
+
+This test creates a local development order and one real Printful draft. It refuses to run outside development or when auto-confirm is enabled, and it never confirms manufacturing.
+
 In an explicitly non-production environment only, set:
 
 ```dotenv
@@ -171,7 +186,7 @@ Also test US/Canada quotes, invalid countries/regions/postal codes, address/quan
 - Tax calculation is currently `0.00`; a future authoritative tax service must run before payment.
 - Non-Printful vendor shipping adapters are not present and currently contribute `0.00` shipping.
 - Automated cancellation/refund requests to Printful are not exposed in the UI; authoritative cancellation/return status synchronization is supported.
-- Printful credentials are currently absent from the local external `.env`, so live API tests require configuration.
+- Production still requires its own external environment configuration, product mappings, webhook registration, migrations, and deployment smoke test.
 
 ## Future Stripe Integration
 
