@@ -179,7 +179,9 @@ requireRole('admin');
                             id="productLongDescription"
                             name="long_description"
                             rows="5"
+                            aria-describedby="productLongDescriptionHelp"
                         ></textarea>
+                        <small id="productLongDescriptionHelp">Plain-text line breaks and basic HTML formatting, including paragraphs and lists, are supported.</small>
                     </div>
 
                     <div class="product-field-row">

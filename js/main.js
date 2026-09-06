@@ -1760,6 +1760,189 @@ function getProductDetailsDescription(product) {
     return longDescription || product?.product_description || '';
 }
 
+const productDescriptionAllowedTags = new Set([
+    'a',
+    'b',
+    'blockquote',
+    'br',
+    'code',
+    'dd',
+    'dl',
+    'dt',
+    'em',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'hr',
+    'i',
+    'li',
+    'ol',
+    'p',
+    'pre',
+    's',
+    'strong',
+    'sub',
+    'sup',
+    'u',
+    'ul'
+]);
+
+const productDescriptionBlockedTags = new Set([
+    'button',
+    'embed',
+    'form',
+    'iframe',
+    'input',
+    'math',
+    'object',
+    'script',
+    'select',
+    'style',
+    'svg',
+    'textarea'
+]);
+
+function sanitizeProductDescriptionUrl(value) {
+    const url = String(value ?? '').trim();
+
+    if (!url || /[\u0000-\u001F\u007F]/.test(url)) {
+        return '';
+    }
+
+    try {
+        const parsedUrl = new URL(url, window.location.origin);
+
+        return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsedUrl.protocol)
+            ? url
+            : '';
+    } catch (error) {
+        return '';
+    }
+}
+
+function sanitizeProductDescriptionNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+        return escapeHtml(node.nodeValue);
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+        return '';
+    }
+
+    const tagName = node.tagName.toLowerCase();
+
+    if (productDescriptionBlockedTags.has(tagName)) {
+        return '';
+    }
+
+    const children = Array.from(node.childNodes)
+        .map(sanitizeProductDescriptionNode)
+        .join('');
+
+    if (!productDescriptionAllowedTags.has(tagName)) {
+        return children;
+    }
+
+    const attributes = [];
+
+    if (tagName === 'a') {
+        const href = sanitizeProductDescriptionUrl(node.getAttribute('href'));
+        const title = String(node.getAttribute('title') ?? '').trim();
+
+        if (href) {
+            attributes.push(`href="${escapeHtml(href)}"`);
+        }
+
+        if (title) {
+            attributes.push(`title="${escapeHtml(title)}"`);
+        }
+
+        if (node.getAttribute('target') === '_blank') {
+            attributes.push('target="_blank"', 'rel="noopener noreferrer"');
+        }
+    }
+
+    const attributeMarkup = attributes.length ? ` ${attributes.join(' ')}` : '';
+
+    if (['br', 'hr'].includes(tagName)) {
+        return `<${tagName}${attributeMarkup}>`;
+    }
+
+    return `<${tagName}${attributeMarkup}>${children}</${tagName}>`;
+}
+
+function formatPlainTextProductDescription(value) {
+    const lines = String(value ?? '').replace(/\r\n?/g, '\n').split('\n');
+    const sections = [];
+    let paragraphLines = [];
+    let listItems = [];
+    let listType = '';
+
+    const flushParagraph = () => {
+        if (!paragraphLines.length) return;
+        sections.push(`<p>${paragraphLines.map(escapeHtml).join('<br>')}</p>`);
+        paragraphLines = [];
+    };
+    const flushList = () => {
+        if (!listItems.length) return;
+        sections.push(`<${listType}>${listItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</${listType}>`);
+        listItems = [];
+        listType = '';
+    };
+
+    lines.forEach((line) => {
+        const unorderedItem = line.match(/^\s*[-*\u2022]\s*(\S.*)$/);
+        const orderedItem = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        const currentListType = unorderedItem ? 'ul' : (orderedItem ? 'ol' : '');
+
+        if (currentListType) {
+            flushParagraph();
+
+            if (listType && listType !== currentListType) {
+                flushList();
+            }
+
+            listType = currentListType;
+            listItems.push((unorderedItem || orderedItem)[1]);
+            return;
+        }
+
+        flushList();
+
+        if (!line.trim()) {
+            flushParagraph();
+            return;
+        }
+
+        paragraphLines.push(line);
+    });
+
+    flushList();
+    flushParagraph();
+
+    return sections.join('');
+}
+
+function formatProductDescription(value) {
+    const description = String(value ?? '').trim();
+
+    if (!description) {
+        return '';
+    }
+
+    if (!/<\/?[a-z][^>]*>/i.test(description)) {
+        return formatPlainTextProductDescription(description);
+    }
+
+    const documentFragment = new DOMParser().parseFromString(description, 'text/html');
+
+    return Array.from(documentFragment.body.childNodes)
+        .map(sanitizeProductDescriptionNode)
+        .join('');
+}
+
 function resolveProductImageSrc(imageUrl) {
     const image = String(imageUrl ?? '').trim();
 
@@ -2073,7 +2256,7 @@ function buildProductDetailsHtml(product, sizeDropdown = '', options = {}) {
             ${formatDropdown}
 
             <!-- Product Description -->
-            <p>${escapeHtml(description)}</p>
+            <div class="product-long-description">${formatProductDescription(description)}</div>
 
             <!-- Product Price -->
             <h2 id="productDetailPrice">$${formattedPrice}</h2>

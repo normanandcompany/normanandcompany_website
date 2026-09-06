@@ -1923,6 +1923,28 @@ footer li {
     max-width: 760px;
 }
 
+.product-long-description {
+    overflow-wrap: anywhere;
+}
+
+.product-long-description > :first-child {
+    margin-top: 0;
+}
+
+.product-long-description > :last-child {
+    margin-bottom: 0;
+}
+
+.product-long-description ul,
+.product-long-description ol {
+    margin: 0.75rem 0 1rem;
+    padding-left: 1.75rem;
+}
+
+.product-long-description li + li {
+    margin-top: 0.25rem;
+}
+
 .product-detail-image {
     width: min(100%, 520px);
     height: auto;
