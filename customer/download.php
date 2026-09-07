@@ -7,6 +7,7 @@ requireLogin();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config/env.php';
 
 $downloadKey = trim((string) ($_GET['key'] ?? ''));
+$isPreview = (string) ($_GET['preview'] ?? '') === '1';
 
 if (!preg_match('/^[a-zA-Z0-9-]{8,64}$/', $downloadKey)) {
     http_response_code(404);
@@ -35,15 +36,24 @@ try {
         exit('Download file not found.');
     }
 
-    $count = $pdo->prepare('UPDATE downloads SET download_count = download_count + 1 WHERE id = :id');
-    $count->execute([':id' => (int) $download['id']]);
-
     $mimeType = function_exists('mime_content_type')
         ? (string) mime_content_type($filePath)
         : 'application/octet-stream';
+    $mimeType = $mimeType !== '' ? $mimeType : 'application/octet-stream';
 
-    header('Content-Type: ' . ($mimeType !== '' ? $mimeType : 'application/octet-stream'));
-    header('Content-Disposition: attachment; filename="' . addcslashes($filename, "\\\"") . '"; filename*=UTF-8\'\'' . rawurlencode($filename));
+    if ($isPreview && !in_array($mimeType, ['image/jpeg', 'image/png', 'application/pdf'], true)) {
+        http_response_code(404);
+        exit('A preview is not available for this file.');
+    }
+
+    if (!$isPreview) {
+        $count = $pdo->prepare('UPDATE downloads SET download_count = download_count + 1 WHERE id = :id');
+        $count->execute([':id' => (int) $download['id']]);
+    }
+
+    $disposition = $isPreview ? 'inline' : 'attachment';
+    header('Content-Type: ' . $mimeType);
+    header('Content-Disposition: ' . $disposition . '; filename="' . addcslashes($filename, "\\\"") . '"; filename*=UTF-8\'\'' . rawurlencode($filename));
     header('Content-Length: ' . (string) filesize($filePath));
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: private, no-store, max-age=0');

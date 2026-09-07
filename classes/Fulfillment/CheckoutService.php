@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 final class CheckoutService
 {
+    private const DROPSHIP_INVENTORY_COUNT = 9999;
     private const ALLOWED_COUNTRIES = ['US', 'CA'];
     private const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
     private const CA_PROVINCES = ['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'];
@@ -307,7 +308,12 @@ final class CheckoutService
             if ($row['fulfillment_provider'] === 'printful' && (!$row['external_variant_id'] || !$row['shipping_variant_id'] || (int) $row['mapping_active'] !== 1 || in_array($row['availability_status'], ['discontinued', 'out_of_stock', 'temporary_out_of_stock'], true))) {
                 throw new InvalidArgumentException($row['product_name'] . ' is not currently available from Printful in the selected size.');
             }
-            if ($row['fulfillment_provider'] !== 'printful' && (int) $row['inventory_count'] < $quantity) {
+            $inventoryCount = (int) $row['inventory_count'];
+            if (
+                $row['fulfillment_provider'] !== 'printful'
+                && $inventoryCount !== self::DROPSHIP_INVENTORY_COUNT
+                && $inventoryCount < $quantity
+            ) {
                 throw new InvalidArgumentException('The requested quantity of ' . $row['product_name'] . ' is not available.');
             }
             $price = number_format((float) $row['price'] + ($isApparel ? (float) $row['price_adjustment'] : 0.0), 2, '.', '');

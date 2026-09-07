@@ -379,21 +379,45 @@ main a:hover {
     flex-direction: column;
     align-items: flex-start;
     color: inherit;
-    text-decoration: none;
     transition: box-shadow 0.2s ease, transform 0.2s ease;
+    overflow: hidden;
 }
 
 .download-card:hover,
-.download-card:focus-visible {
+.download-card:focus-within {
     color: inherit;
-    text-decoration: none;
     box-shadow: 0 6px 18px rgba(22, 58, 99, 0.2);
     transform: translateY(-2px);
 }
 
-.download-card:focus-visible {
+.download-card:focus-within {
     outline: 3px solid var(--primary);
     outline-offset: 3px;
+}
+
+.download-card__preview {
+    width: calc(100% + 3rem);
+    height: 190px;
+    margin: -1.5rem -1.5rem 1.25rem;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(22, 58, 99, 0.12);
+    background: rgba(22, 58, 99, 0.06);
+}
+
+.download-card__preview img,
+.download-card__preview iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.download-card__preview img {
+    object-fit: cover;
+}
+
+.download-card__preview--pdf iframe {
+    pointer-events: none;
 }
 
 .download-card__type {
@@ -430,6 +454,12 @@ main a:hover {
     color: var(--primary);
     font-weight: 800;
     overflow-wrap: anywhere;
+}
+
+.download-card__action:focus-visible {
+    border-radius: 3px;
+    outline: 3px solid var(--primary);
+    outline-offset: 3px;
 }
 
 .cruise-line-card {

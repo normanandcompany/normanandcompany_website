@@ -49,15 +49,26 @@ try {
             <?php foreach ($downloads as $download): ?>
                 <?php
                 $url = '/customer/download.php?key=' . rawurlencode((string) $download['download_key']);
+                $previewUrl = $url . '&preview=1';
+                $extension = strtolower(pathinfo((string) $download['filename'], PATHINFO_EXTENSION));
                 $categoryDescription = trim((string) ($download['category_description'] ?? '')) ?: 'Uncategorized';
                 ?>
-                <a class="card download-card" data-download-category-id="<?= (int) ($download['download_category_id'] ?? 0) ?>" href="<?= htmlspecialchars($url, ENT_QUOTES, 'UTF-8') ?>">
-                    <span class="download-card__type"><?= htmlspecialchars(strtoupper(pathinfo((string) $download['filename'], PATHINFO_EXTENSION) ?: 'FILE'), ENT_QUOTES, 'UTF-8') ?></span>
+                <article class="card download-card" data-download-category-id="<?= (int) ($download['download_category_id'] ?? 0) ?>">
+                    <?php if (in_array($extension, ['jpg', 'jpeg', 'png'], true)): ?>
+                        <div class="download-card__preview">
+                            <img src="<?= htmlspecialchars($previewUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Preview of <?= htmlspecialchars((string) $download['title'], ENT_QUOTES, 'UTF-8') ?>" loading="lazy">
+                        </div>
+                    <?php elseif ($extension === 'pdf'): ?>
+                        <div class="download-card__preview download-card__preview--pdf">
+                            <iframe src="<?= htmlspecialchars($previewUrl . '#page=1&view=FitH&toolbar=0&navpanes=0&scrollbar=0', ENT_QUOTES, 'UTF-8') ?>" title="Preview of <?= htmlspecialchars((string) $download['title'], ENT_QUOTES, 'UTF-8') ?>" loading="lazy" tabindex="-1"></iframe>
+                        </div>
+                    <?php endif; ?>
+                    <span class="download-card__type"><?= htmlspecialchars(strtoupper($extension ?: 'FILE'), ENT_QUOTES, 'UTF-8') ?></span>
                     <h2><?= htmlspecialchars((string) $download['title'], ENT_QUOTES, 'UTF-8') ?></h2>
                     <span class="download-card__category"><?= htmlspecialchars($categoryDescription, ENT_QUOTES, 'UTF-8') ?></span>
                     <p><?= nl2br(htmlspecialchars((string) $download['description'], ENT_QUOTES, 'UTF-8')) ?></p>
-                    <span class="download-card__action">Download <?= htmlspecialchars((string) $download['filename'], ENT_QUOTES, 'UTF-8') ?></span>
-                </a>
+                    <a class="download-card__action" href="<?= htmlspecialchars($url, ENT_QUOTES, 'UTF-8') ?>">Download <?= htmlspecialchars((string) $download['filename'], ENT_QUOTES, 'UTF-8') ?></a>
+                </article>
             <?php endforeach; ?>
         </div>
     <?php endif; ?>

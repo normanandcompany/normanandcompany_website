@@ -2,6 +2,8 @@
 // DYNAMIC PAGE LOADER UX
 // =========================================
 
+const DROPSHIP_INVENTORY_COUNT = 9999;
+
 function isDynamicSiteShell() {
     const normalizedPath = window.location.pathname.replace(/\/+$/, '') || '/';
 
@@ -2196,7 +2198,8 @@ function getProductPurchaseControls(product) {
     const productId = Number.parseInt(product?.id ?? 0, 10);
     const inventoryCount = Number.parseInt(product?.inventory_count ?? '', 10);
     const hasInventoryLimit = String(product?.fulfillment_provider || '').toLowerCase() !== 'printful'
-        && Number.isFinite(inventoryCount) && inventoryCount >= 0;
+        && Number.isFinite(inventoryCount) && inventoryCount >= 0
+        && inventoryCount !== DROPSHIP_INVENTORY_COUNT;
     const hasAvailableVariant = Number(product?.is_apparel) !== 1
         || (Array.isArray(product?.variants) && product.variants.some((variant) => Number(variant.is_available) === 1));
     const isOutOfStock = (hasInventoryLimit && inventoryCount <= 0) || !hasAvailableVariant;
@@ -2794,7 +2797,10 @@ function normalizeCartItem(item) {
         productVariantId,
         sizeLabel: String(item?.sizeLabel ?? ''),
         quantity,
-        inventoryCount: Number.isFinite(inventoryCount) && inventoryCount >= 0 ? inventoryCount : null
+        inventoryCount: Number.isFinite(inventoryCount) && inventoryCount >= 0
+            && inventoryCount !== DROPSHIP_INVENTORY_COUNT
+            ? inventoryCount
+            : null
     };
 }
 
@@ -2983,7 +2989,8 @@ function addProductToCart(product, options = {}) {
     const productVariantId = Number.parseInt(options.productVariantId ?? sizeValue ?? 0, 10) || null;
     const inventoryCount = Number.parseInt(product?.inventory_count ?? '', 10);
     const hasInventoryLimit = String(product?.fulfillment_provider || '').toLowerCase() !== 'printful'
-        && Number.isFinite(inventoryCount) && inventoryCount >= 0;
+        && Number.isFinite(inventoryCount) && inventoryCount >= 0
+        && inventoryCount !== DROPSHIP_INVENTORY_COUNT;
 
     if (!id || !name || !Number.isFinite(price)) {
         showCartStatus('Unable to add this product to the cart.');
@@ -3006,6 +3013,7 @@ function addProductToCart(product, options = {}) {
         existingItem.quantity = clampedQuantity;
         existingItem.price = price;
         existingItem.sizeLabel = sizeLabel;
+        existingItem.inventoryCount = hasInventoryLimit ? inventoryCount : null;
     } else {
         shoppingCartState.items.push({
             key,
