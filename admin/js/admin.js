@@ -4348,7 +4348,10 @@ async function loadTasks() {
         const [tasks, users, relations] = await Promise.all([
             fetchAdminJson('/admin/api/getTasks.php'),
             fetchAdminJson('/admin/api/getTaskUsers.php'),
-            fetchAdminJson('/admin/api/getTaskRelations.php')
+            fetchAdminJson('/admin/api/getTaskRelations.php').catch((error) => {
+                console.warn('Task CRM relationships are unavailable:', error);
+                return { leads: [], opportunities: [] };
+            })
         ]);
 
         taskManagerState.tasks = Array.isArray(tasks) ? tasks : [];
