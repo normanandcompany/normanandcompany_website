@@ -4418,7 +4418,7 @@ function bindTaskManagerEvents() {
     resetButton?.addEventListener('click', () => {
         if (searchInput) searchInput.value = '';
         if (userFilter) userFilter.value = 'all';
-        if (statusFilter) statusFilter.value = 'all';
+        if (statusFilter) statusFilter.value = 'active';
         if (priorityFilter) priorityFilter.value = 'all';
         taskManagerState.currentPage = 1;
         applyTaskFilters();
@@ -4636,13 +4636,14 @@ function getTaskSearchValue() {
 
 function applyTaskFilters() {
     const userFilter = document.getElementById('taskUserFilter')?.value || 'all';
-    const statusFilter = document.getElementById('taskStatusFilter')?.value || 'all';
+    const statusFilter = document.getElementById('taskStatusFilter')?.value || 'active';
     const priorityFilter = document.getElementById('taskPriorityFilter')?.value || 'all';
     const searchValue = getTaskSearchValue();
 
     taskManagerState.filteredTasks = taskManagerState.tasks.filter((task) => {
         const matchesUser = userFilter === 'all' || String(task.user_id ?? '') === String(userFilter);
-        const matchesStatus = statusFilter === 'all' || String(task.task_status ?? '') === String(statusFilter);
+        const matchesStatus = statusFilter === 'all'
+            || (statusFilter === 'active' ? !isTaskClosed(task) : String(task.task_status ?? '') === String(statusFilter));
         const matchesPriority = priorityFilter === 'all' || String(task.priority ?? '') === String(priorityFilter);
         const searchable = [
             task.title,
