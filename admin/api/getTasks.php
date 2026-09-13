@@ -4,6 +4,25 @@ require_once 'task_helpers.php';
 requireAdminTaskJson();
 require_once 'db.php';
 
+function taskSchemaHasColumn(PDO $pdo, string $table, string $column): bool
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name AND COLUMN_NAME = :column_name");
+    $stmt->execute([
+        ':table_name' => $table,
+        ':column_name' => $column
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function taskSchemaHasTable(PDO $pdo, string $table): bool
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name");
+    $stmt->execute([':table_name' => $table]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
 try {
     $status = $_GET['status'] ?? null;
     $userId = $_GET['user_id'] ?? null;
@@ -32,13 +51,31 @@ try {
     }
 
     $whereSql = $where === [] ? '' : 'WHERE ' . implode(' AND ', $where);
+    $hasLeadRelationship = taskSchemaHasColumn($pdo, 'tasks', 'lead_id')
+        && taskSchemaHasTable($pdo, 'email_leads');
+    $hasOpportunityRelationship = taskSchemaHasColumn($pdo, 'tasks', 'opportunity_id')
+        && taskSchemaHasTable($pdo, 'opportunities');
+    $leadIdSelect = $hasLeadRelationship ? 't.lead_id' : 'NULL AS lead_id';
+    $opportunityIdSelect = $hasOpportunityRelationship ? 't.opportunity_id' : 'NULL AS opportunity_id';
+    $leadFields = $hasLeadRelationship
+        ? "CONCAT_WS(' ', l.first_name, l.last_name) AS lead_name, l.company AS lead_company, l.email_address AS lead_email"
+        : 'NULL AS lead_name, NULL AS lead_company, NULL AS lead_email';
+    $opportunityField = $hasOpportunityRelationship
+        ? 'o.opportunity_name'
+        : 'NULL AS opportunity_name';
+    $leadJoin = $hasLeadRelationship
+        ? 'LEFT JOIN email_leads l ON l.id = t.lead_id'
+        : '';
+    $opportunityJoin = $hasOpportunityRelationship
+        ? 'LEFT JOIN opportunities o ON o.id = t.opportunity_id'
+        : '';
 
     $sql = "
         SELECT
             t.id,
             t.user_id,
-            t.lead_id,
-            t.opportunity_id,
+            {$leadIdSelect},
+            {$opportunityIdSelect},
             t.title,
             t.description,
             t.task_status,
@@ -54,14 +91,12 @@ try {
             t.updated_at,
             CONCAT(u.first_name, ' ', u.last_name) AS assigned_to,
             u.email_address AS assigned_email,
-            CONCAT_WS(' ', l.first_name, l.last_name) AS lead_name,
-            l.company AS lead_company,
-            l.email_address AS lead_email,
-            o.opportunity_name
+            {$leadFields},
+            {$opportunityField}
         FROM tasks t
         INNER JOIN users u ON u.id = t.user_id
-        LEFT JOIN email_leads l ON l.id = t.lead_id
-        LEFT JOIN opportunities o ON o.id = t.opportunity_id
+        {$leadJoin}
+        {$opportunityJoin}
         {$whereSql}
         ORDER BY
             CASE WHEN t.due_at IS NULL THEN 1 ELSE 0 END,
