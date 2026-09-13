@@ -42,8 +42,8 @@ requireRole('admin');
         <div class="product-filter-field">
             <label for="taskStatusFilter">Status</label>
             <select id="taskStatusFilter">
-                <option value="active" selected>Active Tasks</option>
-                <option value="all">All Tasks</option>
+                <option value="active">Active Tasks</option>
+                <option value="all" selected>All Tasks</option>
                 <option value="open">Open</option>
                 <option value="in_progress">In Progress</option>
                 <option value="completed">Completed</option>

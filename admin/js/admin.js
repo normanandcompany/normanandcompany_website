@@ -4364,6 +4364,8 @@ async function loadTasks() {
 
         populateTaskUserControls();
         populateTaskRelationControls();
+        const statusFilter = document.getElementById('taskStatusFilter');
+        if (statusFilter) statusFilter.value = 'active';
         applyTaskFilters();
     } catch (error) {
         console.error('Error loading tasks:', error);
