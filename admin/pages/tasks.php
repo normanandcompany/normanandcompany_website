@@ -94,7 +94,7 @@ requireRole('admin');
                     <tr>
                         <th>Task</th>
                         <th>Assigned To</th>
-                        <th>Related To</th>
+                        <th>Lead / Opportunity</th>
                         <th>Priority</th>
                         <th>Status</th>
                         <th>Due</th>
@@ -153,20 +153,14 @@ requireRole('admin');
                         >
                     </div>
 
-                    <div class="product-field-row two-column">
-                        <div class="form-group stacked">
-                            <label for="taskLeadId">Related Lead</label>
-                            <select id="taskLeadId" name="lead_id">
-                                <option value="">No lead</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group stacked">
-                            <label for="taskOpportunityId">Related Opportunity</label>
-                            <select id="taskOpportunityId" name="opportunity_id">
-                                <option value="">No opportunity</option>
-                            </select>
-                        </div>
+                    <div class="form-group stacked">
+                        <label for="taskRelationship">Relationship <small>(optional)</small></label>
+                        <select id="taskRelationship" aria-describedby="taskRelationshipHelp">
+                            <option value="">No related lead or opportunity</option>
+                        </select>
+                        <small id="taskRelationshipHelp">Link this task to an existing CRM lead or opportunity.</small>
+                        <input type="hidden" id="taskLeadId" name="lead_id">
+                        <input type="hidden" id="taskOpportunityId" name="opportunity_id">
                     </div>
 
                     <div class="product-field-row two-column">

@@ -1215,6 +1215,7 @@ const taskManagerState = {
     users: [],
     leads: [],
     opportunities: [],
+    relationshipsAvailable: true,
     currentPage: 1,
     perPage: 10
 };
@@ -4350,7 +4351,7 @@ async function loadTasks() {
             fetchAdminJson('/admin/api/getTaskUsers.php'),
             fetchAdminJson('/admin/api/getTaskRelations.php').catch((error) => {
                 console.warn('Task CRM relationships are unavailable:', error);
-                return { leads: [], opportunities: [] };
+                return { leads: [], opportunities: [], unavailable: true };
             })
         ]);
 
@@ -4358,6 +4359,7 @@ async function loadTasks() {
         taskManagerState.users = Array.isArray(users) ? users : [];
         taskManagerState.leads = Array.isArray(relations?.leads) ? relations.leads : [];
         taskManagerState.opportunities = Array.isArray(relations?.opportunities) ? relations.opportunities : [];
+        taskManagerState.relationshipsAvailable = !relations?.unavailable;
         taskManagerState.currentPage = 1;
 
         populateTaskUserControls();
@@ -4389,8 +4391,7 @@ function bindTaskManagerEvents() {
         document.getElementById('taskUserId'),
         document.getElementById('taskDueAt'),
         document.getElementById('taskStatus'),
-        document.getElementById('taskLeadId'),
-        document.getElementById('taskOpportunityId'),
+        document.getElementById('taskRelationship'),
         document.getElementById('taskRecurring'),
         document.getElementById('taskRecurrenceFrequency'),
         document.getElementById('taskRecurrenceInterval'),
@@ -4466,8 +4467,7 @@ function bindTaskManagerEvents() {
         field?.addEventListener('change', updateTaskPreview);
     });
     document.getElementById('taskRecurring')?.addEventListener('change', toggleTaskRecurrenceFields);
-    document.getElementById('taskLeadId')?.addEventListener('change', filterTaskOpportunityOptions);
-    document.getElementById('taskOpportunityId')?.addEventListener('change', syncTaskLeadFromOpportunity);
+    document.getElementById('taskRelationship')?.addEventListener('change', syncTaskRelationshipFields);
 }
 
 function setTaskTableLoading(message = 'Loading tasks...') {
@@ -4547,37 +4547,43 @@ function getTaskLeadLabel(lead) {
 }
 
 function populateTaskRelationControls() {
-    const leadSelect = document.getElementById('taskLeadId');
-    const opportunitySelect = document.getElementById('taskOpportunityId');
-    if (leadSelect) {
-        leadSelect.innerHTML = `<option value="">No lead</option>${taskManagerState.leads.map(lead => `<option value="${adminEscapeHtml(lead.id)}">${adminEscapeHtml(getTaskLeadLabel(lead))}</option>`).join('')}`;
+    const select = document.getElementById('taskRelationship');
+    if (!select) return;
+
+    if (!taskManagerState.relationshipsAvailable) {
+        select.innerHTML = '<option value="">Relationships are currently unavailable</option>';
+        select.disabled = true;
+        return;
     }
-    if (opportunitySelect) {
-        opportunitySelect.innerHTML = `<option value="">No opportunity</option>${taskManagerState.opportunities.map(opportunity => `<option value="${adminEscapeHtml(opportunity.id)}" data-lead-id="${adminEscapeHtml(opportunity.lead_id)}">${adminEscapeHtml(opportunity.opportunity_name)}</option>`).join('')}`;
-    }
+
+    const leadOptions = taskManagerState.leads
+        .map((lead) => `<option value="lead:${adminEscapeHtml(lead.id)}" data-lead-id="${adminEscapeHtml(lead.id)}">${adminEscapeHtml(getTaskLeadLabel(lead))}</option>`)
+        .join('');
+    const opportunityOptions = taskManagerState.opportunities
+        .map((opportunity) => {
+            const leadLabel = opportunity.company || opportunity.lead_name || '';
+            const label = leadLabel
+                ? `${opportunity.opportunity_name} — ${leadLabel}`
+                : opportunity.opportunity_name;
+
+            return `<option value="opportunity:${adminEscapeHtml(opportunity.id)}" data-lead-id="${adminEscapeHtml(opportunity.lead_id)}" data-opportunity-id="${adminEscapeHtml(opportunity.id)}">${adminEscapeHtml(label)}</option>`;
+        })
+        .join('');
+
+    select.disabled = false;
+    select.innerHTML = `
+        <option value="">No related lead or opportunity</option>
+        ${leadOptions ? `<optgroup label="Leads">${leadOptions}</optgroup>` : ''}
+        ${opportunityOptions ? `<optgroup label="Opportunities">${opportunityOptions}</optgroup>` : ''}
+    `;
 }
 
-function filterTaskOpportunityOptions() {
-    const leadSelect = document.getElementById('taskLeadId');
-    const opportunitySelect = document.getElementById('taskOpportunityId');
-    if (!opportunitySelect) return;
-    const leadId = String(leadSelect?.value || '');
-    [...opportunitySelect.options].forEach(option => {
-        option.hidden = Boolean(leadId && option.value && option.dataset.leadId !== leadId);
-    });
-    const selected = opportunitySelect.selectedOptions?.[0];
-    if (selected?.hidden) opportunitySelect.value = '';
-    updateTaskPreview();
-}
+function syncTaskRelationshipFields() {
+    const relationshipSelect = document.getElementById('taskRelationship');
+    const selected = relationshipSelect?.selectedOptions?.[0];
 
-function syncTaskLeadFromOpportunity() {
-    const leadSelect = document.getElementById('taskLeadId');
-    const opportunitySelect = document.getElementById('taskOpportunityId');
-    const selected = opportunitySelect?.selectedOptions?.[0];
-    if (leadSelect && selected?.value && selected.dataset.leadId) {
-        leadSelect.value = selected.dataset.leadId;
-        filterTaskOpportunityOptions();
-    }
+    setTaskFormValue('taskLeadId', selected?.dataset.leadId || '');
+    setTaskFormValue('taskOpportunityId', selected?.dataset.opportunityId || '');
     updateTaskPreview();
 }
 
@@ -4758,6 +4764,10 @@ function renderTasks() {
         const dueClass = isTaskOverdue(task) ? 'task-due-cell overdue' : 'task-due-cell';
         const completed = task.completed_at ? `Completed ${formatDateTime(task.completed_at)}` : '';
         const calendarUrl = String(task.google_calendar_url || '#');
+        const relatedName = task.opportunity_name || task.lead_company || task.lead_name || 'None';
+        const relatedType = task.opportunity_name
+            ? `Opportunity${task.lead_company || task.lead_name ? ` · ${adminEscapeHtml(task.lead_company || task.lead_name)}` : ''}`
+            : (task.lead_id ? 'Lead' : 'No lead or opportunity');
 
         if (description) {
             detailLines.push(description);
@@ -4783,8 +4793,8 @@ function renderTasks() {
                 </td>
                 <td>
                     <div class="task-user-cell">
-                        <strong>${adminEscapeHtml(task.opportunity_name || task.lead_company || task.lead_name || 'Not linked')}</strong>
-                        <small>${task.opportunity_name ? `Opportunity · ${adminEscapeHtml(task.lead_company || task.lead_name || '')}` : (task.lead_id ? 'Lead' : '')}</small>
+                        <strong>${adminEscapeHtml(relatedName)}</strong>
+                        <small>${relatedType}</small>
                     </div>
                 </td>
                 <td>${getTaskPriorityBadge(task.priority)}</td>
@@ -4895,7 +4905,12 @@ function openTaskForm(task = null) {
     setTaskFormValue('taskUserId', task?.user_id || defaultUserId);
     setTaskFormValue('taskLeadId', task?.lead_id || '');
     setTaskFormValue('taskOpportunityId', task?.opportunity_id || '');
-    filterTaskOpportunityOptions();
+    setTaskFormValue(
+        'taskRelationship',
+        task?.opportunity_id
+            ? `opportunity:${task.opportunity_id}`
+            : (task?.lead_id ? `lead:${task.lead_id}` : '')
+    );
     setTaskFormValue('taskDueAt', formatDateTimeForInput(task?.due_at));
     setTaskFormValue('taskStatus', task?.task_status || 'open');
     setTaskFormValue('taskPriority', task?.priority || 'normal');
@@ -4941,8 +4956,7 @@ function updateTaskPreview() {
     const title = document.getElementById('taskTitle')?.value || '';
     const userSelect = document.getElementById('taskUserId');
     const dueAt = document.getElementById('taskDueAt')?.value || '';
-    const leadSelect = document.getElementById('taskLeadId');
-    const opportunitySelect = document.getElementById('taskOpportunityId');
+    const relationshipSelect = document.getElementById('taskRelationship');
     const status = document.getElementById('taskStatus')?.value || 'open';
     const recurringCheckbox = document.getElementById('taskRecurring');
     const recurrenceFrequency = document.getElementById('taskRecurrenceFrequency')?.value || 'weekly';
@@ -4975,9 +4989,15 @@ function updateTaskPreview() {
     }
 
     if (previewRelation) {
-        const opportunity = opportunitySelect?.value ? opportunitySelect.selectedOptions?.[0]?.textContent?.trim() : '';
-        const lead = leadSelect?.value ? leadSelect.selectedOptions?.[0]?.textContent?.trim() : '';
-        previewRelation.textContent = opportunity ? `Opportunity: ${opportunity}` : (lead ? `Lead: ${lead}` : 'No related lead or opportunity');
+        const selected = relationshipSelect?.selectedOptions?.[0];
+        const selectedLabel = relationshipSelect?.value ? selected?.textContent?.trim() : '';
+        const relationshipType = String(relationshipSelect?.value || '').startsWith('opportunity:')
+            ? 'Opportunity'
+            : 'Lead';
+
+        previewRelation.textContent = selectedLabel
+            ? `${relationshipType}: ${selectedLabel}`
+            : 'No related lead or opportunity';
     }
 
     if (previewRecurrence) {

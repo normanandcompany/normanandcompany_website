@@ -64,13 +64,6 @@ try {
         LEFT JOIN opportunities o ON o.id = t.opportunity_id
         {$whereSql}
         ORDER BY
-            CASE t.task_status
-                WHEN 'open' THEN 1
-                WHEN 'in_progress' THEN 2
-                WHEN 'completed' THEN 3
-                WHEN 'canceled' THEN 4
-                ELSE 5
-            END,
             CASE WHEN t.due_at IS NULL THEN 1 ELSE 0 END,
             t.due_at ASC,
             t.created_at DESC,
